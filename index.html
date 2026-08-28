@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>과학 질문 주머니</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body { font-family: 'Malgun Gothic', sans-serif; padding: 20px; background-color: #f4f7f6; }
+        .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; text-align: center; cursor: pointer; user-select: none; }
+        input, textarea, select { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; }
+        .row-group { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+        .row-group > * { flex: 1; min-width: 80px; }
+        button { width: 100%; padding: 10px; background-color: #27ae60; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; margin-bottom: 10px; }
+        button:hover { background-color: #2ecc71; }
+        .btn-teacher { background-color: #2980b9; width: auto; display: inline-block; }
+        .history-box { background: #e8f8f5; padding: 15px; border-left: 5px solid #1abc9c; margin-bottom: 10px; border-radius: 4px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+        th { background-color: #34495e; color: white; }
+        .dashboard-header { display: flex; justify-content: space-between; align-items: center; background: #ecf0f1; padding: 10px; border-radius: 5px; }
+        .reg-box { background: #fdfefe; padding: 15px; border: 1px solid #bdc3c7; border-radius: 5px; margin-top: 20px; }
+        .info-text { font-size: 13px; color: #7f8c8d; margin-top: -5px; margin-bottom: 10px; display: block; }
+    </style>
+</head>
+<body>
+
+<div class="container" id="student-view">
+    <h1 id="main-title" 
+        onmousedown="startTimer()" onmouseup="clearTimer()" onmouseleave="clearTimer()" 
+        ontouchstart="startTimer()" ontouchend="clearTimer()">
+        💡 과학 질문 주머니
+    </h1>
+
+    <h3>학생 정보 입력</h3>
+    <div class="row-group">
+        <select id="schoolSelect" onchange="populateGradeDropdown()"><option value="" disabled selected>학교 선택</option></select>
+        <select id="gradeSelect" onchange="populateClassDropdown()"><option value="" disabled selected>학년 선택</option></select>
+        <select id="classSelect"><option value="" disabled selected>반 선택</option></select>
+        <input type="number" id="studentNum" placeholder="번호 입력">
+    </div>
+    
+    <h3>차시 선택</h3>
+    <select id="lessonSelect" onchange="loadLessonData()">
+        <option value="" disabled selected>차시를 선택하세요 (선택 시 본인 확인을 진행합니다)</option>
+        <option value="1">[2단원 1차시] 거품에 향불 피우기</option>
+        <option value="2">[2단원 2차시] 서로 다른 물질을 섞으면 어떻게 될까요</option>
+        <option value="3">[2단원 3차시] 양초와 알코올이 탈 때 나타나는 공통점</option>
+        <option value="4">[2단원 4차시] 물질이 타려면 무엇이 필요할까요 (1)</option>
+        <option value="5">[2단원 5차시] 물질이 타려면 무엇이 필요할까요 (2)</option>
+        <option value="6">[2단원 6차시] 물질이 연소할 때 무엇이 생길까요</option>
+    </select>
+    
+    <div id="input-area" style="display:none;">
+        <label>수업에서 관찰하거나 실험한 내용</label>
+        <textarea id="observation" rows="3"></textarea>
+        <label>그것을 통해 궁금한 것 (질문)</label>
+        <textarea id="question" rows="3"></textarea>
+        <button onclick="saveData()">저장 / 수정하기</button>
+    </div>
+
+    <div id="history-area" style="margin-top: 30px; display:none;">
+        <h3>나의 이전 차시 질문들</h3>
+        <div id="history-list"></div>
+    </div>
+</div>
+
+<div class="container" id="teacher-view" style="display:none; max-width: 95%;">
+    <div class="dashboard-header">
+        <h2>👨‍🏫 교사 대시보드</h2>
+        <div>
+            <button class="btn-teacher" onclick="downloadExcel()">📥 전체 엑셀 다운로드</button>
+            <button style="background:#7f8c8d; width:auto; display:inline-block;" onclick="location.reload()">🏠 학생 화면으로</button>
+        </div>
+    </div>
+    
+    <div style="margin-top: 15px;">
+        <button class="btn-teacher" style="background:#8e44ad;" onclick="showSection('qna')">📝 학생 질문 확인</button>
+        <button class="btn-teacher" style="background:#d35400;" onclick="showSection('register')">👥 학생 명단 등록</button>
+    </div>
+
+    <div id="section-qna">
+        <div style="margin: 15px 0; padding: 10px; background: #ecf0f1; border-radius: 5px;">
+            <label style="font-weight: bold; margin-right:10px;">학교/학급 필터:</label>
+            <select id="teacherSchoolFilter" style="width: auto; display: inline-block;" onchange="updateTeacherClassFilter()">
+                <option value="all">전체 학교</option>
+            </select>
+            <select id="teacherClassFilter" style="width: auto; display: inline-block;" onchange="renderQuestionTable()">
+                <option value="all">전체 학급</option>
+            </select>
+        </div>
+        
+        <table id="teacher-table">
+            <thead>
+                <tr><th>학교</th><th>학년-반</th><th>번호</th><th>단원</th><th>차시</th><th>관찰내용</th><th>질문</th><th>기록일시</th></tr>
+            </thead>
+            <tbody id="teacher-tbody"></tbody>
+        </table>
+    </div>
+
+    <div id="section-register" style="display:none;">
+        <div class="reg-box">
+            <h3>엑셀 파일로 학생 명단 일괄 등록</h3>
+            <span class="info-text">※ 엑셀 1행(헤더)에 <strong>학교, 학년, 반, 번호</strong> 열이 포함되어야 합니다.</span>
+            <div class="row-group">
+                <input type="file" id="excelFileInput" accept=".xlsx, .xls">
+                <button onclick="uploadExcel()" style="background:#27ae60; flex: 0.3;">일괄 업로드</button>
+            </div>
+        </div>
+
+        <div class="reg-box">
+            <h3>개별 학생 명단 등록</h3>
+            <div class="row-group">
+                <input type="text" id="regSchool" placeholder="학교 이름 (예: 한산초)">
+                <input type="number" id="regGrade" placeholder="학년" value="6">
+                <input type="number" id="regClass" placeholder="반">
+                <input type="number" id="regNum" placeholder="번호">
+            </div>
+            <button onclick="registerStudent()" style="background:#d35400;">명단에 등록하기</button>
+        </div>
+        
+        <h3 style="margin-top: 20px;">등록된 학생 명단 전체</h3>
+        <table id="students-table">
+            <thead>
+                <tr><th>학교</th><th>학년</th><th>반</th><th>번호</th><th>등록일시</th></tr>
+            </thead>
+            <tbody id="students-tbody"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSy...",
+        authDomain: "your-project.firebaseapp.com",
+        projectId: "your-project",
+        storageBucket: "your-project.appspot.com",
+        messagingSenderId: "123456...",
+        appId: "1:123456..."
+    };
+    if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+    }
+    const db = firebase.firestore();
+
+    let allStudents = [];
+    let allLatestQuestions = [];
+
+    async function initApp() {
+        const snapshot = await db.collection("students").get();
+        allStudents = [];
+        snapshot.forEach(doc => allStudents.push(doc.data()));
+        populateSchoolDropdown();
+    }
+    window.onload = initApp;
+
+    function populateSchoolDropdown() {
+        const schoolSet = new Set(allStudents.map(s => s.schoolCode));
+        const schoolSelect = document.getElementById('schoolSelect');
+        schoolSelect.innerHTML = '<option value="" disabled selected>학교 선택</option>';
+        schoolSet.forEach(school => {
+            schoolSelect.innerHTML += `<option value="${school}">${school}</option>`;
+        });
+        
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlSchool = urlParams.get('school');
+        if(urlSchool && schoolSet.has(urlSchool)) {
+            schoolSelect.value = urlSchool;
+            populateGradeDropdown();
+        }
+    }
+
+    function populateGradeDropdown() {
+        const school = document.getElementById('schoolSelect').value;
+        const gradeSet = new Set(allStudents.filter(s => s.schoolCode === school).map(s => s.grade));
+        const gradeSelect = document.getElementById('gradeSelect');
+        gradeSelect.innerHTML = '<option value="" disabled selected>학년 선택</option>';
+        Array.from(gradeSet).sort((a,b)=>a-b).forEach(grade => {
+            gradeSelect.innerHTML += `<option value="${grade}">${grade}학년</option>`;
+        });
+        document.getElementById('classSelect').innerHTML = '<option value="" disabled selected>반 선택</option>';
+    }
+
+    function populateClassDropdown() {
+        const school = document.getElementById('schoolSelect').value;
+        const grade = parseInt(document.getElementById('gradeSelect').value);
+        const classSet = new Set(allStudents.filter(s => s.schoolCode === school && s.grade === grade).map(s => s.classNum));
+        const classSelect = document.getElementById('classSelect');
+        classSelect.innerHTML = '<option value="" disabled selected>반 선택</option>';
+        Array.from(classSet).sort((a,b)=>a-b).forEach(cNum => {
+            classSelect.innerHTML += `<option value="${cNum}">${cNum}반</option>`;
+        });
+    }
+
+    function validateStudent() {
+        const school = document.getElementById('schoolSelect').value;
+        const grade = parseInt(document.getElementById('gradeSelect').value);
+        const classNum = parseInt(document.getElementById('classSelect').value);
+        const studentNum = parseInt(document.getElementById('studentNum').value);
+
+        if (!school || isNaN(grade) || isNaN(classNum) || isNaN(studentNum)) {
+            alert("학교, 학년, 반을 선택하고 번호를 정확히 입력하세요.");
+            return false;
+        }
+
+        const isValid = allStudents.some(s => 
+            s.schoolCode === school && s.grade === grade && 
+            s.classNum === classNum && s.studentNum === studentNum
+        );
+
+        if (!isValid) {
+            alert("등록된 학생 정보와 일치하지 않습니다.\n맞는 번호를 입력해주세요.");
+            document.getElementById('studentNum').value = '';
+            document.getElementById('studentNum').focus();
+            document.getElementById('lessonSelect').selectedIndex = 0;
+            document.getElementById('input-area').style.display = 'none';
+            document.getElementById('history-area').style.display = 'none';
+            return false;
+        }
+        return true;
+    }
+
+    let timer;
+    function startTimer() { 
+        timer = setTimeout(() => { 
+            document.getElementById('student-view').style.display = 'none';
+            document.getElementById('teacher-view').style.display = 'block';
+            loadTeacherData(); 
+            loadRegisteredStudents();
+        }, 2000); 
+    }
+    function clearTimer() { clearTimeout(timer); }
+
+    async function loadLessonData() {
+        if (!validateStudent()) return; 
+
+        const school = document.getElementById('schoolSelect').value;
+        const grade = parseInt(document.getElementById('gradeSelect').value);
+        const cNum = parseInt(document.getElementById('classSelect').value);
+        const sNum = parseInt(document.getElementById('studentNum').value);
+        const select = document.getElementById('lessonSelect');
+        const lesson = select.value;
+
+        if(!lesson) return;
+        document.getElementById('input-area').style.display = 'block';
+
+        const snapshot = await db.collection("questions")
+            .where("schoolCode", "==", school)
+            .where("grade", "==", grade)
+            .where("classNum", "==", cNum)
+            .where("studentNum", "==", sNum)
+            .where("lesson", "==", parseInt(lesson))
+            .where("isLatest", "==", true).get();
+
+        if(!snapshot.empty) {
+            const data = snapshot.docs[0].data();
+            document.getElementById('observation').value = data.observation;
+            document.getElementById('question').value = data.question;
+        } else {
+            document.getElementById('observation').value = '';
+            document.getElementById('question').value = '';
+        }
+
+        loadStudentHistory(school, grade, cNum, sNum);
+    }
+
+    async function loadStudentHistory(school, grade, cNum, sNum) {
+        const historyList = document.getElementById('history-list');
+        historyList.innerHTML = '';
+        
+        const snapshot = await db.collection("questions")
+            .where("schoolCode", "==", school)
+            .where("grade", "==", grade)
+            .where("classNum", "==", cNum)
+            .where("studentNum", "==", sNum)
+            .where("isLatest", "==", true).get();
+
+        let docs = [];
+        snapshot.forEach(doc => docs.push(doc.data()));
+        docs.sort((a, b) => a.lesson - b.lesson);
+
+        if(docs.length > 0) {
+            document.getElementById('history-area').style.display = 'block';
+            docs.forEach(data => {
+                historyList.innerHTML += `
+                    <div class="history-box">
+                        <strong>2단원 ${data.lesson}차시: ${data.topic}</strong><br>
+                        <span style="font-size: 0.9em; color: #555;">관찰: ${data.observation}</span><br>
+                        <span style="font-size: 0.9em; color: #d35400;">질문: ${data.question}</span>
+                    </div>`;
+            });
+        }
+    }
+
+    async function saveData() {
+        if (!validateStudent()) return;
+
+        const school = document.getElementById('schoolSelect').value;
+        const grade = parseInt(document.getElementById('gradeSelect').value);
+        const classNum = parseInt(document.getElementById('classSelect').value);
+        const studentNum = parseInt(document.getElementById('studentNum').value);
+        const select = document.getElementById('lessonSelect');
+        const lesson = parseInt(select.value);
+        const topic = select.options[select.selectedIndex].text;
+        const observation = document.getElementById('observation').value;
+        const question = document.getElementById('question').value;
+
+        if(!observation || !question) {
+            alert("관찰 내용과 질문을 모두 입력해주세요!"); return;
+        }
+
+        const snapshot = await db.collection("questions")
+            .where("schoolCode", "==", school)
+            .where("grade", "==", grade)
+            .where("classNum", "==", classNum)
+            .where("studentNum", "==", studentNum)
+            .where("lesson", "==", lesson)
+            .where("isLatest", "==", true).get();
+        
+        const batch = db.batch();
+        snapshot.forEach(doc => { batch.update(doc.ref, { isLatest: false }); });
+
+        const newRef = db.collection("questions").doc();
+        batch.set(newRef, {
+            schoolCode: school, grade: grade, classNum: classNum, studentNum: studentNum,
+            unit: 2, lesson: lesson, topic: topic,
+            observation: observation, question: question,
+            isLatest: true, createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        await batch.commit();
+        alert("기록이 성공적으로 저장되었습니다!");
+        loadStudentHistory(school, grade, classNum, studentNum);
+    }
+
+    function showSection(sectionId) {
+        document.getElementById('section-qna').style.display = sectionId === 'qna' ? 'block' : 'none';
+        document.getElementById('section-register').style.display = sectionId === 'register' ? 'block' : 'none';
+        if(sectionId === 'qna') loadTeacherData();
+        if(sectionId === 'register') loadRegisteredStudents();
+    }
+
+    async function loadTeacherData() {
+        const tbody = document.getElementById('teacher-tbody');
+        tbody.innerHTML = '<tr><td colspan="8">데이터 불러오는 중...</td></tr>';
+        
+        const snapshot = await db.collection("questions").where("isLatest", "==", true).get();
+
+        allLatestQuestions = [];
+        let schoolSet = new Set();
+        
+        snapshot.forEach(doc => {
+            let data = doc.data();
+            allLatestQuestions.push(data);
+            schoolSet.add(data.schoolCode);
+        });
+
+        const schoolFilter = document.getElementById('teacherSchoolFilter');
+        schoolFilter.innerHTML = '<option value="all">전체 학교</option>';
+        schoolSet.forEach(s => schoolFilter.innerHTML += `<option value="${s}">${s}</option>`);
+        
+        updateTeacherClassFilter();
+    }
+
+    function updateTeacherClassFilter() {
+        const selectedSchool = document.getElementById('teacherSchoolFilter').value;
+        const classFilter = document.getElementById('teacherClassFilter');
+        
+        let filteredData = selectedSchool === 'all' ? allLatestQuestions : allLatestQuestions.filter(q => q.schoolCode === selectedSchool);
+        let classSet = new Set(filteredData.map(q => q.classNum));
+
+        classFilter.innerHTML = '<option value="all">전체 학급</option>';
+        Array.from(classSet).sort((a,b)=>a-b).forEach(cNum => {
+            classFilter.innerHTML += `<option value="${cNum}">${cNum}반</option>`;
+        });
+        
+        renderQuestionTable();
+    }
+
+    function renderQuestionTable() {
+        const tbody = document.getElementById('teacher-tbody');
+        const schoolF = document.getElementById('teacherSchoolFilter').value;
+        const classF = document.getElementById('teacherClassFilter').value;
+        
+        let filteredData = allLatestQuestions;
+        if(schoolF !== 'all') filteredData = filteredData.filter(q => q.schoolCode === schoolF);
+        if(classF !== 'all') filteredData = filteredData.filter(q => q.classNum === parseInt(classF));
+
+        filteredData.sort((a, b) => {
+            if(a.schoolCode !== b.schoolCode) return a.schoolCode.localeCompare(b.schoolCode);
+            if(a.grade !== b.grade) return a.grade - b.grade;
+            if(a.classNum !== b.classNum) return a.classNum - b.classNum;
+            if(a.studentNum !== b.studentNum) return a.studentNum - b.studentNum;
+            return a.lesson - b.lesson;
+        });
+
+        tbody.innerHTML = '';
+        if(filteredData.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8">등록된 질문 기록이 없습니다.</td></tr>';
+            return;
+        }
+
+        filteredData.forEach(d => {
+            const dateStr = d.createdAt ? d.createdAt.toDate().toLocaleString() : "방금 전";
+            tbody.innerHTML += `<tr>
+                <td>${d.schoolCode}</td><td>${d.grade}-${d.classNum}</td><td>${d.studentNum}</td>
+                <td>${d.unit}단원</td><td>${d.lesson}차시</td>
+                <td>${d.observation}</td><td>${d.question}</td><td>${dateStr}</td>
+            </tr>`;
+        });
+    }
+
+    async function registerStudent() {
+        const school = document.getElementById('regSchool').value.trim();
+        const grade = parseInt(document.getElementById('regGrade').value);
+        const classNum = parseInt(document.getElementById('regClass').value);
+        const studentNum = parseInt(document.getElementById('regNum').value);
+
+        if(!school || isNaN(grade) || isNaN(classNum) || isNaN(studentNum)) {
+            alert("학생의 모든 정보(학교, 학년, 반, 번호)를 정확히 입력하세요."); return;
+        }
+
+        const isDuplicate = allStudents.some(s => 
+            s.schoolCode === school && s.grade === grade && 
+            s.classNum === classNum && s.studentNum === studentNum
+        );
+        if(isDuplicate) {
+            alert("이미 등록된 번호입니다."); return;
+        }
+
+        const newStudent = { schoolCode: school, grade: grade, classNum: classNum, studentNum: studentNum };
+
+        await db.collection("students").add({
+            ...newStudent,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        allStudents.push(newStudent);
+        alert(`[${school}] ${grade}학년 ${classNum}반 ${studentNum}번 학생 등록 완료!`);
+        document.getElementById('regNum').value = '';
+        document.getElementById('regNum').focus();
+        
+        loadRegisteredStudents();
+        populateSchoolDropdown();
+    }
+
+    function uploadExcel() {
+        const fileInput = document.getElementById('excelFileInput');
+        const file = fileInput.files[0];
+        if (!file) {
+            alert("엑셀 파일을 선택해주세요.");
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = async function(e) {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, {type: 'array'});
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+            let addedCount = 0;
+            let duplicateCount = 0;
+            let errorCount = 0;
+
+            const batch = db.batch();
+            let batchCount = 0;
+
+            for (const row of jsonData) {
+                const school = row["학교"];
+                const grade = parseInt(row["학년"]);
+                const classNum = parseInt(row["반"]);
+                const studentNum = parseInt(row["번호"]);
+
+                if (!school || isNaN(grade) || isNaN(classNum) || isNaN(studentNum)) {
+                    errorCount++;
+                    continue;
+                }
+
+                const isDuplicate = allStudents.some(s => 
+                    s.schoolCode === school && s.grade === grade && 
+                    s.classNum === classNum && s.studentNum === studentNum
+                );
+
+                if (isDuplicate) {
+                    duplicateCount++;
+                } else {
+                    const newStudent = { schoolCode: school, grade: grade, classNum: classNum, studentNum: studentNum };
+                    const docRef = db.collection("students").doc();
+                    
+                    batch.set(docRef, {
+                        ...newStudent,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    
+                    allStudents.push(newStudent);
+                    addedCount++;
+                    batchCount++;
+                }
+            }
+
+            if (batchCount > 0) {
+                await batch.commit();
+            }
+
+            alert(`엑셀 업로드 완료!\n\n- 신규 등록: ${addedCount}명\n- 중복 제외: ${duplicateCount}명\n- 양식 오류: ${errorCount}명`);
+            fileInput.value = "";
+            loadRegisteredStudents();
+            populateSchoolDropdown();
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    async function loadRegisteredStudents() {
+        const tbody = document.getElementById('students-tbody');
+        tbody.innerHTML = '<tr><td colspan="5">명단 불러오는 중...</td></tr>';
+        
+        const snapshot = await db.collection("students").get();
+        let students = [];
+        snapshot.forEach(doc => students.push(doc.data()));
+        
+        students.sort((a, b) => {
+            if(a.schoolCode !== b.schoolCode) return a.schoolCode.localeCompare(b.schoolCode);
+            if(a.grade !== b.grade) return a.grade - b.grade;
+            if(a.classNum !== b.classNum) return a.classNum - b.classNum;
+            return a.studentNum - b.studentNum;
+        });
+
+        tbody.innerHTML = '';
+        if(students.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5">등록된 학생이 없습니다.</td></tr>';
+            return;
+        }
+
+        students.forEach(d => {
+            const dateStr = d.createdAt ? d.createdAt.toDate().toLocaleString() : "방금 전";
+            tbody.innerHTML += `<tr>
+                <td>${d.schoolCode}</td><td>${d.grade}</td><td>${d.classNum}</td>
+                <td>${d.studentNum}</td><td>${dateStr}</td>
+            </tr>`;
+        });
+    }
+
+    async function downloadExcel() {
+        const snapshot = await db.collection("questions").get();
+        let data = [];
+        snapshot.forEach(doc => {
+            const d = doc.data();
+            data.push({
+                "학교": d.schoolCode, "학년": d.grade, "반": d.classNum, "번호": d.studentNum,
+                "단원": d.unit, "차시": d.lesson, "주제": d.topic,
+                "관찰내용": d.observation, "질문": d.question,
+                "최신여부": d.isLatest ? "O" : "X(수정됨)",
+                "기록일시": d.createdAt ? d.createdAt.toDate().toLocaleString() : ""
+            });
+        });
+        
+        data.sort((a, b) => {
+            if(a.학교 !== b.학교) return a.학교.localeCompare(b.학교);
+            if(a.학년 !== b.학년) return a.학년 - b.학년;
+            if(a.반 !== b.반) return a.반 - b.반;
+            if(a.번호 !== b.번호) return a.번호 - b.번호;
+            if(a.차시 !== b.차시) return a.차시 - b.차시;
+            return new Date(a.기록일시) - new Date(b.기록일시);
+        });
+
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "전체_질문기록");
+        XLSX.writeFile(wb, `학생_질문기록_전체.xlsx`);
+    }
+</script>
+</body>
+</html>
