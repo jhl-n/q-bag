@@ -462,7 +462,9 @@
             const workbook = XLSX.read(data, {type: 'array'});
             const firstSheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[firstSheetName];
-            const jsonData = XLSX.utils.sheet_to_json(worksheet);
+            
+            // defval 옵션을 주어 빈 칸도 읽어오도록 설정
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, {defval: ""});
 
             let addedCount = 0;
             let duplicateCount = 0;
@@ -472,16 +474,30 @@
             let batchCount = 0;
 
             for (const row of jsonData) {
-                const school = row["학교"];
-                const grade = parseInt(row["학년"]);
-                const classNum = parseInt(row["반"]);
-                const studentNum = parseInt(row["번호"]);
+                // 엑셀 헤더의 공백 무시하고 키 찾기 (유연한 매칭)
+                let schoolKey = Object.keys(row).find(k => k.trim() === "학교");
+                let gradeKey = Object.keys(row).find(k => k.trim() === "학년");
+                let classKey = Object.keys(row).find(k => k.trim() === "반");
+                let numKey = Object.keys(row).find(k => k.trim() === "번호");
 
+                // 키를 못 찾았거나 값이 없으면 양식 오류 처리
+                if (!schoolKey || !gradeKey || !classKey || !numKey) {
+                    errorCount++;
+                    continue;
+                }
+
+                const school = String(row[schoolKey]).trim();
+                const grade = parseInt(row[gradeKey]);
+                const classNum = parseInt(row[classKey]);
+                const studentNum = parseInt(row[numKey]);
+
+                // 데이터 값이 유효하지 않은 경우
                 if (!school || isNaN(grade) || isNaN(classNum) || isNaN(studentNum)) {
                     errorCount++;
                     continue;
                 }
 
+                // 중복 검사
                 const isDuplicate = allStudents.some(s => 
                     s.schoolCode === school && s.grade === grade && 
                     s.classNum === classNum && s.studentNum === studentNum
@@ -515,7 +531,6 @@
         };
         reader.readAsArrayBuffer(file);
     }
-
     async function loadRegisteredStudents() {
         const tbody = document.getElementById('students-tbody');
         tbody.innerHTML = '<tr><td colspan="5">명단 불러오는 중...</td></tr>';
