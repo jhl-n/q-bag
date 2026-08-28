@@ -30,6 +30,7 @@
 </head>
 <body>
 
+<!-- 학생 화면 뷰 -->
 <div class="container" id="student-view">
     <h1 id="main-title" 
         onmousedown="startTimer()" onmouseup="clearTimer()" onmouseleave="clearTimer()" 
@@ -70,6 +71,7 @@
     </div>
 </div>
 
+<!-- 교사 대시보드 뷰 -->
 <div class="container" id="teacher-view" style="display:none; max-width: 95%;">
     <div class="dashboard-header">
         <h2>👨‍🏫 교사 대시보드</h2>
@@ -84,6 +86,7 @@
         <button class="btn-teacher" style="background:#d35400;" onclick="showSection('register')">👥 학생 명단 등록</button>
     </div>
 
+    <!-- 1. 질문 확인 섹션 -->
     <div id="section-qna">
         <div style="margin: 15px 0; padding: 10px; background: #ecf0f1; border-radius: 5px;">
             <label style="font-weight: bold; margin-right:10px;">학교/학급 필터:</label>
@@ -103,6 +106,7 @@
         </table>
     </div>
 
+    <!-- 2. 학생 등록 섹션 -->
     <div id="section-register" style="display:none;">
         <div class="reg-box">
             <h3>엑셀 파일로 학생 명단 일괄 등록</h3>
@@ -152,6 +156,7 @@
     let allStudents = [];
     let allLatestQuestions = [];
 
+    // --- 앱 초기화 (서버에서 학생 명단 로드) ---
     async function initApp() {
         try {
             const snapshot = await db.collection("students").get();
@@ -159,15 +164,21 @@
             snapshot.forEach(doc => allStudents.push(doc.data()));
             populateSchoolDropdown();
         } catch (error) {
-            console.error("데이터베이스 읽기 오류:", error);
-            alert("데이터를 불러오지 못했습니다. Firebase 데이터베이스 규칙을 확인해주세요.");
+            console.error(error);
+            alert("❗ 데이터베이스 읽기 오류 발생!\nFirebase 보안 규칙이 막혀있거나 DB가 생성되지 않았습니다.\n(에러: " + error.message + ")");
         }
     }
     window.onload = initApp;
 
     function populateSchoolDropdown() {
-        const schoolSet = new Set(allStudents.map(s => s.schoolCode));
         const schoolSelect = document.getElementById('schoolSelect');
+        
+        if(allStudents.length === 0) {
+            schoolSelect.innerHTML = '<option value="" disabled selected>등록된 학교 없음 (교사 메뉴에서 명단 등록 필요)</option>';
+            return;
+        }
+
+        const schoolSet = new Set(allStudents.map(s => s.schoolCode));
         schoolSelect.innerHTML = '<option value="" disabled selected>학교 선택</option>';
         schoolSet.forEach(school => {
             schoolSelect.innerHTML += `<option value="${school}">${school}</option>`;
@@ -320,28 +331,35 @@
             alert("관찰 내용과 질문을 모두 입력해주세요!"); return;
         }
 
-        const snapshot = await db.collection("questions")
-            .where("schoolCode", "==", school)
-            .where("grade", "==", grade)
-            .where("classNum", "==", classNum)
-            .where("studentNum", "==", studentNum)
-            .where("lesson", "==", lesson)
-            .where("isLatest", "==", true).get();
-        
-        const batch = db.batch();
-        snapshot.forEach(doc => { batch.update(doc.ref, { isLatest: false }); });
+        try {
+            const snapshot = await db.collection("questions")
+                .where("schoolCode", "==", school)
+                .where("grade", "==", grade)
+                .where("classNum", "==", classNum)
+                .where("studentNum", "==", studentNum)
+                .where("lesson", "==", lesson)
+                .where("isLatest", "==", true).get();
+            
+            const batch = db.batch();
+            snapshot.forEach(doc => { batch.update(doc.ref, { isLatest: false }); });
 
-        const newRef = db.collection("questions").doc();
-        batch.set(newRef, {
-            schoolCode: school, grade: grade, classNum: classNum, studentNum: studentNum,
-            unit: 2, lesson: lesson, topic: topic,
-            observation: observation, question: question,
-            isLatest: true, createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
+            const newRef = db.collection("questions").doc();
+            batch.set(newRef, {
+                schoolCode: school, grade: grade, classNum: classNum, studentNum: studentNum,
+                unit: 2, lesson: lesson, topic: topic,
+                observation: observation, question: question,
+                isLatest: true, createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
 
-        await batch.commit();
-        alert("기록이 성공적으로 저장되었습니다!");
-        loadStudentHistory(school, grade, classNum, studentNum);
+            await batch.commit(); // 서버 저장 완료 대기
+            
+            alert("기록이 성공적으로 저장되었습니다!");
+            loadStudentHistory(school, grade, classNum, studentNum);
+            
+        } catch (error) {
+            console.error(error);
+            alert("저장 실패! 서버 접속 오류나 권한 문제가 있습니다.\n에러: " + error.message);
+        }
     }
 
     function showSection(sectionId) {
@@ -355,22 +373,26 @@
         const tbody = document.getElementById('teacher-tbody');
         tbody.innerHTML = '<tr><td colspan="8">데이터 불러오는 중...</td></tr>';
         
-        const snapshot = await db.collection("questions").where("isLatest", "==", true).get();
+        try {
+            const snapshot = await db.collection("questions").where("isLatest", "==", true).get();
 
-        allLatestQuestions = [];
-        let schoolSet = new Set();
-        
-        snapshot.forEach(doc => {
-            let data = doc.data();
-            allLatestQuestions.push(data);
-            schoolSet.add(data.schoolCode);
-        });
+            allLatestQuestions = [];
+            let schoolSet = new Set();
+            
+            snapshot.forEach(doc => {
+                let data = doc.data();
+                allLatestQuestions.push(data);
+                schoolSet.add(data.schoolCode);
+            });
 
-        const schoolFilter = document.getElementById('teacherSchoolFilter');
-        schoolFilter.innerHTML = '<option value="all">전체 학교</option>';
-        schoolSet.forEach(s => schoolFilter.innerHTML += `<option value="${s}">${s}</option>`);
-        
-        updateTeacherClassFilter();
+            const schoolFilter = document.getElementById('teacherSchoolFilter');
+            schoolFilter.innerHTML = '<option value="all">전체 학교</option>';
+            schoolSet.forEach(s => schoolFilter.innerHTML += `<option value="${s}">${s}</option>`);
+            
+            updateTeacherClassFilter();
+        } catch (error) {
+            tbody.innerHTML = '<tr><td colspan="8">에러: ' + error.message + '</td></tr>';
+        }
     }
 
     function updateTeacherClassFilter() {
@@ -439,20 +461,28 @@
             alert("이미 등록된 번호입니다."); return;
         }
 
-        const newStudent = { schoolCode: school, grade: grade, classNum: classNum, studentNum: studentNum };
+        try {
+            const newStudent = { schoolCode: school, grade: grade, classNum: classNum, studentNum: studentNum };
+            
+            // 서버에 먼저 저장 요청
+            await db.collection("students").add({
+                ...newStudent,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
 
-        await db.collection("students").add({
-            ...newStudent,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-
-        allStudents.push(newStudent);
-        alert(`[${school}] ${grade}학년 ${classNum}반 ${studentNum}번 학생 등록 완료!`);
-        document.getElementById('regNum').value = '';
-        document.getElementById('regNum').focus();
-        
-        loadRegisteredStudents();
-        populateSchoolDropdown();
+            // 서버 저장 성공 시에만 로컬 배열 추가 및 알림
+            allStudents.push(newStudent);
+            alert(`[${school}] ${grade}학년 ${classNum}반 ${studentNum}번 학생 등록 완료!`);
+            
+            document.getElementById('regNum').value = '';
+            document.getElementById('regNum').focus();
+            
+            loadRegisteredStudents();
+            populateSchoolDropdown();
+            
+        } catch(error) {
+            alert("학생 등록 실패! Firebase 규칙 또는 연결을 확인하세요.\n" + error.message);
+        }
     }
 
     function uploadExcel() {
@@ -470,18 +500,17 @@
             const firstSheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[firstSheetName];
             
-            // 엑셀의 빈 칸 허용 및 여백 무시를 위한 설정
             const jsonData = XLSX.utils.sheet_to_json(worksheet, {defval: ""});
 
             let addedCount = 0;
             let duplicateCount = 0;
             let errorCount = 0;
+            let newStudentsArray = []; // 서버 업로드 성공 시 로컬 배열에 추가할 리스트
 
             const batch = db.batch();
             let batchCount = 0;
 
             for (const row of jsonData) {
-                // 헤더의 띄어쓰기 유연하게 처리
                 let schoolKey = Object.keys(row).find(k => k.trim() === "학교");
                 let gradeKey = Object.keys(row).find(k => k.trim() === "학년");
                 let classKey = Object.keys(row).find(k => k.trim() === "반");
@@ -518,20 +547,27 @@
                         createdAt: firebase.firestore.FieldValue.serverTimestamp()
                     });
                     
-                    allStudents.push(newStudent);
+                    newStudentsArray.push(newStudent);
                     addedCount++;
                     batchCount++;
                 }
             }
 
-            if (batchCount > 0) {
-                await batch.commit();
-            }
+            try {
+                if (batchCount > 0) {
+                    await batch.commit(); // 서버 전송 완료 대기
+                    allStudents.push(...newStudentsArray); // 서버 저장 성공 후에만 화면 데이터 업데이트
+                }
 
-            alert(`엑셀 업로드 완료!\n\n- 신규 등록: ${addedCount}명\n- 중복 제외: ${duplicateCount}명\n- 양식 오류: ${errorCount}명`);
-            fileInput.value = "";
-            loadRegisteredStudents();
-            populateSchoolDropdown();
+                alert(`엑셀 업로드 완료!\n\n- 신규 등록: ${addedCount}명\n- 중복 제외: ${duplicateCount}명\n- 양식 오류: ${errorCount}명`);
+                fileInput.value = "";
+                loadRegisteredStudents();
+                populateSchoolDropdown();
+                
+            } catch (error) {
+                console.error(error);
+                alert("엑셀 업로드 실패! Firebase 규칙을 확인해주세요.\n(에러 내용: " + error.message + ")");
+            }
         };
         reader.readAsArrayBuffer(file);
     }
@@ -540,30 +576,34 @@
         const tbody = document.getElementById('students-tbody');
         tbody.innerHTML = '<tr><td colspan="5">명단 불러오는 중...</td></tr>';
         
-        const snapshot = await db.collection("students").get();
-        let students = [];
-        snapshot.forEach(doc => students.push(doc.data()));
-        
-        students.sort((a, b) => {
-            if(a.schoolCode !== b.schoolCode) return a.schoolCode.localeCompare(b.schoolCode);
-            if(a.grade !== b.grade) return a.grade - b.grade;
-            if(a.classNum !== b.classNum) return a.classNum - b.classNum;
-            return a.studentNum - b.studentNum;
-        });
+        try {
+            const snapshot = await db.collection("students").get();
+            let students = [];
+            snapshot.forEach(doc => students.push(doc.data()));
+            
+            students.sort((a, b) => {
+                if(a.schoolCode !== b.schoolCode) return a.schoolCode.localeCompare(b.schoolCode);
+                if(a.grade !== b.grade) return a.grade - b.grade;
+                if(a.classNum !== b.classNum) return a.classNum - b.classNum;
+                return a.studentNum - b.studentNum;
+            });
 
-        tbody.innerHTML = '';
-        if(students.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5">등록된 학생이 없습니다.</td></tr>';
-            return;
+            tbody.innerHTML = '';
+            if(students.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5">등록된 학생이 없습니다.</td></tr>';
+                return;
+            }
+
+            students.forEach(d => {
+                const dateStr = d.createdAt ? d.createdAt.toDate().toLocaleString() : "방금 전";
+                tbody.innerHTML += `<tr>
+                    <td>${d.schoolCode}</td><td>${d.grade}</td><td>${d.classNum}</td>
+                    <td>${d.studentNum}</td><td>${dateStr}</td>
+                </tr>`;
+            });
+        } catch (error) {
+            tbody.innerHTML = '<tr><td colspan="5">에러: ' + error.message + '</td></tr>';
         }
-
-        students.forEach(d => {
-            const dateStr = d.createdAt ? d.createdAt.toDate().toLocaleString() : "방금 전";
-            tbody.innerHTML += `<tr>
-                <td>${d.schoolCode}</td><td>${d.grade}</td><td>${d.classNum}</td>
-                <td>${d.studentNum}</td><td>${dateStr}</td>
-            </tr>`;
-        });
     }
 
     async function downloadExcel() {
