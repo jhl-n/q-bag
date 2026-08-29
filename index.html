@@ -46,15 +46,16 @@
         <input type="number" id="studentNum" placeholder="번호 입력">
     </div>
     
+    <h3>단원 선택</h3>
+    <select id="unitSelect" onchange="populateLessonDropdown()">
+        <option value="" disabled selected>단원을 선택하세요</option>
+        <option value="2">2단원. 물질의 연소</option>
+        <option value="3">3단원. 전기의 이용</option>
+    </select>
+
     <h3>차시 선택</h3>
-    <select id="lessonSelect" onchange="loadLessonData()">
-        <option value="" disabled selected>차시를 선택하세요 (선택 시 본인 확인을 진행합니다)</option>
-        <option value="1">[2단원 1차시] 거품에 향불 피우기</option>
-        <option value="2">[2단원 2차시] 서로 다른 물질을 섞으면 어떻게 될까요</option>
-        <option value="3">[2단원 3차시] 양초와 알코올이 탈 때 나타나는 공통점</option>
-        <option value="4">[2단원 4차시] 물질이 타려면 무엇이 필요할까요 (1)</option>
-        <option value="5">[2단원 5차시] 물질이 타려면 무엇이 필요할까요 (2)</option>
-        <option value="6">[2단원 6차시] 물질이 연소할 때 무엇이 생길까요</option>
+    <select id="lessonSelect" onchange="loadLessonData()" disabled>
+        <option value="" disabled selected>먼저 단원을 선택하세요</option>
     </select>
     
     <div id="input-area" style="display:none;">
@@ -156,7 +157,27 @@
     let allStudents = [];
     let allLatestQuestions = [];
 
-    // --- 앱 초기화 (서버에서 학생 명단 로드) ---
+    const LESSON_DATA = {
+        "2": {
+            "1": "거품에 향불 피우기",
+            "2": "서로 다른 물질을 섞으면 어떻게 될까요",
+            "3": "양초와 알코올이 탈 때 나타나는 공통점",
+            "4": "물질이 타려면 무엇이 필요할까요 (1)",
+            "5": "물질이 타려면 무엇이 필요할까요 (2)",
+            "6": "물질이 연소할 때 무엇이 생길까요"
+        },
+        "3": {
+            "1": "전기로 움직이는 병뚜껑 장난감 만들기",
+            "2": "전구에 불을 켜려면 어떻게 해야 할까요",
+            "3": "전기가 잘 흐르는 물질에는 어떤 것이 있을까요",
+            "4": "전지의 수에 따른 전기 회로의 특징 비교 (1)",
+            "5": "전지의 수에 따른 전기 회로의 특징 비교 (2)",
+            "6": "전자석을 만들어 볼까요",
+            "7": "전자석은 어떤 성질이 있을까요",
+            "8": "전자석이 사용되는 예를 조사해 볼까요"
+        }
+    };
+
     async function initApp() {
         try {
             const snapshot = await db.collection("students").get();
@@ -214,6 +235,37 @@
         });
     }
 
+    function populateLessonDropdown() {
+        const unit = document.getElementById('unitSelect').value;
+        const lessonSelect = document.getElementById('lessonSelect');
+        
+        document.getElementById('input-area').style.display = 'none';
+        
+        if (!unit) {
+            lessonSelect.innerHTML = '<option value="" disabled selected>먼저 단원을 선택하세요</option>';
+            lessonSelect.disabled = true;
+            return;
+        }
+
+        lessonSelect.innerHTML = '<option value="" disabled selected>차시를 선택하세요 (선택 시 본인 확인을 진행합니다)</option>';
+        
+        const lessons = LESSON_DATA[unit];
+        for (const [lessonNum, topic] of Object.entries(lessons)) {
+            lessonSelect.innerHTML += `<option value="${lessonNum}">[${unit}단원 ${lessonNum}차시] ${topic}</option>`;
+        }
+        lessonSelect.disabled = false;
+        
+        // 단원 변경 시 학생 히스토리 재로드
+        const school = document.getElementById('schoolSelect').value;
+        const grade = parseInt(document.getElementById('gradeSelect').value);
+        const cNum = parseInt(document.getElementById('classSelect').value);
+        const sNum = parseInt(document.getElementById('studentNum').value);
+        
+        if (school && !isNaN(grade) && !isNaN(cNum) && !isNaN(sNum)) {
+             loadStudentHistory(school, grade, cNum, sNum, parseInt(unit));
+        }
+    }
+
     function validateStudent() {
         const school = document.getElementById('schoolSelect').value;
         const grade = parseInt(document.getElementById('gradeSelect').value);
@@ -260,10 +312,11 @@
         const grade = parseInt(document.getElementById('gradeSelect').value);
         const cNum = parseInt(document.getElementById('classSelect').value);
         const sNum = parseInt(document.getElementById('studentNum').value);
-        const select = document.getElementById('lessonSelect');
-        const lesson = select.value;
+        const unit = parseInt(document.getElementById('unitSelect').value);
+        const lesson = parseInt(document.getElementById('lessonSelect').value);
 
-        if(!lesson) return;
+        if(isNaN(unit) || isNaN(lesson)) return;
+        
         document.getElementById('input-area').style.display = 'block';
 
         const snapshot = await db.collection("questions")
@@ -271,7 +324,8 @@
             .where("grade", "==", grade)
             .where("classNum", "==", cNum)
             .where("studentNum", "==", sNum)
-            .where("lesson", "==", parseInt(lesson))
+            .where("unit", "==", unit)
+            .where("lesson", "==", lesson)
             .where("isLatest", "==", true).get();
 
         if(!snapshot.empty) {
@@ -283,10 +337,10 @@
             document.getElementById('question').value = '';
         }
 
-        loadStudentHistory(school, grade, cNum, sNum);
+        loadStudentHistory(school, grade, cNum, sNum, unit);
     }
 
-    async function loadStudentHistory(school, grade, cNum, sNum) {
+    async function loadStudentHistory(school, grade, cNum, sNum, unit) {
         const historyList = document.getElementById('history-list');
         historyList.innerHTML = '';
         
@@ -295,6 +349,7 @@
             .where("grade", "==", grade)
             .where("classNum", "==", cNum)
             .where("studentNum", "==", sNum)
+            .where("unit", "==", unit)
             .where("isLatest", "==", true).get();
 
         let docs = [];
@@ -306,11 +361,13 @@
             docs.forEach(data => {
                 historyList.innerHTML += `
                     <div class="history-box">
-                        <strong>2단원 ${data.lesson}차시: ${data.topic}</strong><br>
+                        <strong>${data.unit}단원 ${data.lesson}차시: ${data.topic}</strong><br>
                         <span style="font-size: 0.9em; color: #555;">관찰: ${data.observation}</span><br>
                         <span style="font-size: 0.9em; color: #d35400;">질문: ${data.question}</span>
                     </div>`;
             });
+        } else {
+            document.getElementById('history-area').style.display = 'none';
         }
     }
 
@@ -321,9 +378,14 @@
         const grade = parseInt(document.getElementById('gradeSelect').value);
         const classNum = parseInt(document.getElementById('classSelect').value);
         const studentNum = parseInt(document.getElementById('studentNum').value);
+        const unit = parseInt(document.getElementById('unitSelect').value);
         const select = document.getElementById('lessonSelect');
         const lesson = parseInt(select.value);
-        const topic = select.options[select.selectedIndex].text;
+        
+        // select.options[select.selectedIndex].text 에서 "[X단원 Y차시] " 부분 제거
+        const fullText = select.options[select.selectedIndex].text;
+        const topic = fullText.substring(fullText.indexOf("]") + 2);
+        
         const observation = document.getElementById('observation').value;
         const question = document.getElementById('question').value;
 
@@ -337,6 +399,7 @@
                 .where("grade", "==", grade)
                 .where("classNum", "==", classNum)
                 .where("studentNum", "==", studentNum)
+                .where("unit", "==", unit)
                 .where("lesson", "==", lesson)
                 .where("isLatest", "==", true).get();
             
@@ -346,15 +409,15 @@
             const newRef = db.collection("questions").doc();
             batch.set(newRef, {
                 schoolCode: school, grade: grade, classNum: classNum, studentNum: studentNum,
-                unit: 2, lesson: lesson, topic: topic,
+                unit: unit, lesson: lesson, topic: topic,
                 observation: observation, question: question,
                 isLatest: true, createdAt: firebase.firestore.FieldValue.serverTimestamp()
             });
 
-            await batch.commit(); // 서버 저장 완료 대기
+            await batch.commit(); 
             
             alert("기록이 성공적으로 저장되었습니다!");
-            loadStudentHistory(school, grade, classNum, studentNum);
+            loadStudentHistory(school, grade, classNum, studentNum, unit);
             
         } catch (error) {
             console.error(error);
@@ -424,6 +487,7 @@
             if(a.grade !== b.grade) return a.grade - b.grade;
             if(a.classNum !== b.classNum) return a.classNum - b.classNum;
             if(a.studentNum !== b.studentNum) return a.studentNum - b.studentNum;
+            if(a.unit !== b.unit) return a.unit - b.unit;
             return a.lesson - b.lesson;
         });
 
@@ -464,13 +528,11 @@
         try {
             const newStudent = { schoolCode: school, grade: grade, classNum: classNum, studentNum: studentNum };
             
-            // 서버에 먼저 저장 요청
             await db.collection("students").add({
                 ...newStudent,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             });
 
-            // 서버 저장 성공 시에만 로컬 배열 추가 및 알림
             allStudents.push(newStudent);
             alert(`[${school}] ${grade}학년 ${classNum}반 ${studentNum}번 학생 등록 완료!`);
             
@@ -505,7 +567,7 @@
             let addedCount = 0;
             let duplicateCount = 0;
             let errorCount = 0;
-            let newStudentsArray = []; // 서버 업로드 성공 시 로컬 배열에 추가할 리스트
+            let newStudentsArray = []; 
 
             const batch = db.batch();
             let batchCount = 0;
@@ -555,8 +617,8 @@
 
             try {
                 if (batchCount > 0) {
-                    await batch.commit(); // 서버 전송 완료 대기
-                    allStudents.push(...newStudentsArray); // 서버 저장 성공 후에만 화면 데이터 업데이트
+                    await batch.commit(); 
+                    allStudents.push(...newStudentsArray); 
                 }
 
                 alert(`엑셀 업로드 완료!\n\n- 신규 등록: ${addedCount}명\n- 중복 제외: ${duplicateCount}명\n- 양식 오류: ${errorCount}명`);
@@ -625,6 +687,7 @@
             if(a.학년 !== b.학년) return a.학년 - b.학년;
             if(a.반 !== b.반) return a.반 - b.반;
             if(a.번호 !== b.번호) return a.번호 - b.번호;
+            if(a.단원 !== b.단원) return a.단원 - b.단원;
             if(a.차시 !== b.차시) return a.차시 - b.차시;
             return new Date(a.기록일시) - new Date(b.기록일시);
         });
