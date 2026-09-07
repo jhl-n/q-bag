@@ -15,10 +15,12 @@
         h1 { color: #2c3e50; text-align: center; cursor: pointer; user-select: none; }
         input, textarea, select { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; }
         .row-group { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-        .row-group > * { flex: 1; min-width: 80px; }
-        button { width: 100%; padding: 10px; background-color: #27ae60; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; margin-bottom: 10px; }
+        .row-group > * { flex: 1; min-width: 80px; margin-bottom: 0; }
+        button { width: 100%; padding: 10px; background-color: #27ae60; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; margin: 10px 0; }
         button:hover { background-color: #2ecc71; }
         .btn-teacher { background-color: #2980b9; width: auto; display: inline-block; }
+        .btn-reset { background-color: #e74c3c; padding: 5px 10px; font-size: 12px; margin: 0; }
+        .btn-reset:hover { background-color: #c0392b; }
         .history-box { background: #e8f8f5; padding: 15px; border-left: 5px solid #1abc9c; margin-bottom: 10px; border-radius: 4px; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
@@ -38,22 +40,28 @@
         💡 과학 질문 주머니
     </h1>
 
-    <h3>학생 정보 입력</h3>
-    <div class="row-group">
+    <h3>1. 학생 본인 확인</h3>
+    <div class="row-group" style="margin-bottom: 10px;">
         <select id="schoolSelect" onchange="populateGradeDropdown()"><option value="" disabled selected>학교 선택</option></select>
         <select id="gradeSelect" onchange="populateClassDropdown()"><option value="" disabled selected>학년 선택</option></select>
-        <select id="classSelect"><option value="" disabled selected>반 선택</option></select>
-        <input type="number" id="studentNum" placeholder="번호 입력">
+        <select id="classSelect" onchange="populateStudentNumDropdown()"><option value="" disabled selected>반 선택</option></select>
+        <select id="studentNum"><option value="" disabled selected>번호 선택</option></select>
+    </div>
+    <div class="row-group">
+        <input type="password" id="studentPin" placeholder="비밀번호(기본:0000)" maxlength="4">
+        <button id="btn-verify" onclick="verifyStudent()" style="flex: 0.5; background-color: #2980b9;">본인 확인</button>
+        <button id="btn-change-pin" onclick="changePin()" style="display:none; flex: 0.4; background-color: #8e44ad;">비번 변경</button>
     </div>
     
-    <h3>단원 선택</h3>
-    <select id="unitSelect" onchange="populateLessonDropdown()">
-        <option value="" disabled selected>단원을 선택하세요</option>
+    <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+
+    <h3>2. 단원 및 차시 선택</h3>
+    <select id="unitSelect" onchange="populateLessonDropdown()" disabled>
+        <option value="" disabled selected>본인 확인 후 단원을 선택하세요</option>
         <option value="2">2단원. 물질의 연소</option>
         <option value="3">3단원. 전기의 이용</option>
     </select>
 
-    <h3>차시 선택</h3>
     <select id="lessonSelect" onchange="loadLessonData()" disabled>
         <option value="" disabled selected>먼저 단원을 선택하세요</option>
     </select>
@@ -84,7 +92,7 @@
     
     <div style="margin-top: 15px;">
         <button class="btn-teacher" style="background:#8e44ad;" onclick="showSection('qna')">📝 학생 질문 확인</button>
-        <button class="btn-teacher" style="background:#d35400;" onclick="showSection('register')">👥 학생 명단 등록</button>
+        <button class="btn-teacher" style="background:#d35400;" onclick="showSection('register')">👥 학생 명단 등록 관리</button>
     </div>
 
     <!-- 1. 질문 확인 섹션 -->
@@ -111,7 +119,7 @@
     <div id="section-register" style="display:none;">
         <div class="reg-box">
             <h3>엑셀 파일로 학생 명단 일괄 등록</h3>
-            <span class="info-text">※ 엑셀 1행(헤더)에 <strong>학교, 학년, 반, 번호</strong> 열이 포함되어야 합니다.</span>
+            <span class="info-text">※ 엑셀 1행(헤더)에 <strong>학교, 학년, 반, 번호</strong> 열이 포함되어야 합니다. (기본 비밀번호는 '0000'으로 일괄 자동 설정됨)</span>
             <div class="row-group">
                 <input type="file" id="excelFileInput" accept=".xlsx, .xls">
                 <button onclick="uploadExcel()" style="background:#27ae60; flex: 0.3;">일괄 업로드</button>
@@ -126,13 +134,13 @@
                 <input type="number" id="regClass" placeholder="반">
                 <input type="number" id="regNum" placeholder="번호">
             </div>
-            <button onclick="registerStudent()" style="background:#d35400;">명단에 등록하기</button>
+            <button onclick="registerStudent()" style="background:#d35400;">명단에 등록하기 (초기비번:0000)</button>
         </div>
         
-        <h3 style="margin-top: 20px;">등록된 학생 명단 전체</h3>
+        <h3 style="margin-top: 20px;">등록된 학생 명단 (비밀번호 초기화)</h3>
         <table id="students-table">
             <thead>
-                <tr><th>학교</th><th>학년</th><th>반</th><th>번호</th><th>등록일시</th></tr>
+                <tr><th>학교</th><th>학년</th><th>반</th><th>번호</th><th>비밀번호 관리</th></tr>
             </thead>
             <tbody id="students-tbody"></tbody>
         </table>
@@ -140,6 +148,7 @@
 </div>
 
 <script>
+    // ★ 여기에 본인의 Firebase 구성 코드를 붙여넣으세요! ★
     const firebaseConfig = {
       apiKey: "AIzaSyCmPXPSMbCTJxhIupBf0_0uLdM6CMgA_rM",
       authDomain: "q-bag-cc5b0.firebaseapp.com",
@@ -156,6 +165,7 @@
 
     let allStudents = [];
     let allLatestQuestions = [];
+    let currentStudentId = null; 
 
     const LESSON_DATA = {
         "2": {
@@ -182,28 +192,29 @@
         try {
             const snapshot = await db.collection("students").get();
             allStudents = [];
-            snapshot.forEach(doc => allStudents.push(doc.data()));
+            snapshot.forEach(doc => {
+                let data = doc.data();
+                data.id = doc.id; 
+                if (!data.pin) data.pin = "0000"; 
+                allStudents.push(data);
+            });
             populateSchoolDropdown();
         } catch (error) {
-            console.error(error);
-            alert("❗ 데이터베이스 읽기 오류 발생!\nFirebase 보안 규칙이 막혀있거나 DB가 생성되지 않았습니다.\n(에러: " + error.message + ")");
+            alert("❗ 데이터베이스 읽기 오류!\nFirebase 보안 규칙을 확인해주세요.\n(에러: " + error.message + ")");
         }
     }
     window.onload = initApp;
 
+    // --- 풀다운 메뉴 연동 ---
     function populateSchoolDropdown() {
         const schoolSelect = document.getElementById('schoolSelect');
-        
         if(allStudents.length === 0) {
-            schoolSelect.innerHTML = '<option value="" disabled selected>등록된 학교 없음 (교사 메뉴에서 명단 등록 필요)</option>';
+            schoolSelect.innerHTML = '<option value="" disabled selected>등록된 학교 없음</option>';
             return;
         }
-
         const schoolSet = new Set(allStudents.map(s => s.schoolCode));
         schoolSelect.innerHTML = '<option value="" disabled selected>학교 선택</option>';
-        schoolSet.forEach(school => {
-            schoolSelect.innerHTML += `<option value="${school}">${school}</option>`;
-        });
+        schoolSet.forEach(school => { schoolSelect.innerHTML += `<option value="${school}">${school}</option>`; });
         
         const urlParams = new URLSearchParams(window.location.search);
         const urlSchool = urlParams.get('school');
@@ -222,6 +233,7 @@
             gradeSelect.innerHTML += `<option value="${grade}">${grade}학년</option>`;
         });
         document.getElementById('classSelect').innerHTML = '<option value="" disabled selected>반 선택</option>';
+        document.getElementById('studentNum').innerHTML = '<option value="" disabled selected>번호 선택</option>';
     }
 
     function populateClassDropdown() {
@@ -233,97 +245,122 @@
         Array.from(classSet).sort((a,b)=>a-b).forEach(cNum => {
             classSelect.innerHTML += `<option value="${cNum}">${cNum}반</option>`;
         });
+        document.getElementById('studentNum').innerHTML = '<option value="" disabled selected>번호 선택</option>';
     }
 
-    function populateLessonDropdown() {
-        const unit = document.getElementById('unitSelect').value;
-        const lessonSelect = document.getElementById('lessonSelect');
+    function populateStudentNumDropdown() {
+        const school = document.getElementById('schoolSelect').value;
+        const grade = parseInt(document.getElementById('gradeSelect').value);
+        const classNum = parseInt(document.getElementById('classSelect').value);
         
-        document.getElementById('input-area').style.display = 'none';
+        const numSet = new Set(allStudents.filter(s => 
+            s.schoolCode === school && s.grade === grade && s.classNum === classNum
+        ).map(s => s.studentNum));
         
-        if (!unit) {
-            lessonSelect.innerHTML = '<option value="" disabled selected>먼저 단원을 선택하세요</option>';
-            lessonSelect.disabled = true;
+        const numSelect = document.getElementById('studentNum');
+        numSelect.innerHTML = '<option value="" disabled selected>번호 선택</option>';
+        Array.from(numSet).sort((a,b)=>a-b).forEach(sNum => {
+            numSelect.innerHTML += `<option value="${sNum}">${sNum}번</option>`;
+        });
+    }
+
+    // --- 학생 로그인 및 인증 ---
+    function verifyStudent() {
+        const school = document.getElementById('schoolSelect').value;
+        const grade = parseInt(document.getElementById('gradeSelect').value);
+        const classNum = parseInt(document.getElementById('classSelect').value);
+        const studentNum = parseInt(document.getElementById('studentNum').value);
+        const pin = document.getElementById('studentPin').value;
+
+        if (!school || isNaN(grade) || isNaN(classNum) || isNaN(studentNum) || !pin) {
+            alert("학교, 학년, 반, 번호, 비밀번호를 모두 입력(선택)하세요.");
             return;
         }
 
-        lessonSelect.innerHTML = '<option value="" disabled selected>차시를 선택하세요 (선택 시 본인 확인을 진행합니다)</option>';
+        const student = allStudents.find(s => 
+            s.schoolCode === school && s.grade === grade && 
+            s.classNum === classNum && s.studentNum === studentNum
+        );
+
+        if (!student) {
+            alert("등록된 학생 정보가 없습니다.\n교사에게 등록을 요청하세요.");
+            return;
+        }
+
+        if (student.pin !== pin) {
+            alert("비밀번호가 일치하지 않습니다.\n(초기 비밀번호는 0000 입니다)");
+            return;
+        }
+
+        currentStudentId = student.id;
+        document.getElementById('schoolSelect').disabled = true;
+        document.getElementById('gradeSelect').disabled = true;
+        document.getElementById('classSelect').disabled = true;
+        document.getElementById('studentNum').disabled = true;
+        document.getElementById('studentPin').disabled = true;
+        document.getElementById('btn-verify').innerText = "인증 완료";
+        document.getElementById('btn-verify').style.backgroundColor = "#7f8c8d";
         
+        document.getElementById('btn-change-pin').style.display = 'inline-block';
+        document.getElementById('unitSelect').disabled = false;
+        
+        alert("본인 확인이 완료되었습니다. 단원과 차시를 선택해주세요.");
+    }
+
+    async function changePin() {
+        if (!currentStudentId) return;
+        const newPin = prompt("변경할 새로운 4자리 숫자 비밀번호를 입력하세요.");
+        if (newPin === null) return; 
+        if (!/^\d{4}$/.test(newPin)) {
+            alert("비밀번호는 반드시 4자리 숫자여야 합니다.");
+            return;
+        }
+
+        try {
+            await db.collection("students").doc(currentStudentId).update({ pin: newPin });
+            const student = allStudents.find(s => s.id === currentStudentId);
+            student.pin = newPin;
+            document.getElementById('studentPin').value = newPin;
+            alert("비밀번호가 성공적으로 변경되었습니다.");
+        } catch (e) {
+            alert("비밀번호 변경 실패: " + e.message);
+        }
+    }
+
+    // --- 단원 및 차시 선택 ---
+    function populateLessonDropdown() {
+        if (!currentStudentId) return; 
+        const unit = document.getElementById('unitSelect').value;
+        const lessonSelect = document.getElementById('lessonSelect');
+        document.getElementById('input-area').style.display = 'none';
+        
+        if (!unit) return;
+
+        lessonSelect.innerHTML = '<option value="" disabled selected>차시를 선택하세요</option>';
         const lessons = LESSON_DATA[unit];
         for (const [lessonNum, topic] of Object.entries(lessons)) {
             lessonSelect.innerHTML += `<option value="${lessonNum}">[${unit}단원 ${lessonNum}차시] ${topic}</option>`;
         }
         lessonSelect.disabled = false;
         
-        // 단원 변경 시 학생 히스토리 재로드
-        const school = document.getElementById('schoolSelect').value;
-        const grade = parseInt(document.getElementById('gradeSelect').value);
-        const cNum = parseInt(document.getElementById('classSelect').value);
-        const sNum = parseInt(document.getElementById('studentNum').value);
-        
-        if (school && !isNaN(grade) && !isNaN(cNum) && !isNaN(sNum)) {
-             loadStudentHistory(school, grade, cNum, sNum, parseInt(unit));
-        }
+        const student = allStudents.find(s => s.id === currentStudentId);
+        loadStudentHistory(student.schoolCode, student.grade, student.classNum, student.studentNum, parseInt(unit));
     }
-
-    function validateStudent() {
-        const school = document.getElementById('schoolSelect').value;
-        const grade = parseInt(document.getElementById('gradeSelect').value);
-        const classNum = parseInt(document.getElementById('classSelect').value);
-        const studentNum = parseInt(document.getElementById('studentNum').value);
-
-        if (!school || isNaN(grade) || isNaN(classNum) || isNaN(studentNum)) {
-            alert("학교, 학년, 반을 선택하고 번호를 정확히 입력하세요.");
-            return false;
-        }
-
-        const isValid = allStudents.some(s => 
-            s.schoolCode === school && s.grade === grade && 
-            s.classNum === classNum && s.studentNum === studentNum
-        );
-
-        if (!isValid) {
-            alert("등록된 학생 정보와 일치하지 않습니다.\n맞는 번호를 입력해주세요.");
-            document.getElementById('studentNum').value = '';
-            document.getElementById('studentNum').focus();
-            document.getElementById('lessonSelect').selectedIndex = 0;
-            document.getElementById('input-area').style.display = 'none';
-            document.getElementById('history-area').style.display = 'none';
-            return false;
-        }
-        return true;
-    }
-
-    let timer;
-    function startTimer() { 
-        timer = setTimeout(() => { 
-            document.getElementById('student-view').style.display = 'none';
-            document.getElementById('teacher-view').style.display = 'block';
-            loadTeacherData(); 
-            loadRegisteredStudents();
-        }, 2000); 
-    }
-    function clearTimer() { clearTimeout(timer); }
 
     async function loadLessonData() {
-        if (!validateStudent()) return; 
-
-        const school = document.getElementById('schoolSelect').value;
-        const grade = parseInt(document.getElementById('gradeSelect').value);
-        const cNum = parseInt(document.getElementById('classSelect').value);
-        const sNum = parseInt(document.getElementById('studentNum').value);
+        if (!currentStudentId) return;
+        const student = allStudents.find(s => s.id === currentStudentId);
         const unit = parseInt(document.getElementById('unitSelect').value);
         const lesson = parseInt(document.getElementById('lessonSelect').value);
-
         if(isNaN(unit) || isNaN(lesson)) return;
         
         document.getElementById('input-area').style.display = 'block';
 
         const snapshot = await db.collection("questions")
-            .where("schoolCode", "==", school)
-            .where("grade", "==", grade)
-            .where("classNum", "==", cNum)
-            .where("studentNum", "==", sNum)
+            .where("schoolCode", "==", student.schoolCode)
+            .where("grade", "==", student.grade)
+            .where("classNum", "==", student.classNum)
+            .where("studentNum", "==", student.studentNum)
             .where("unit", "==", unit)
             .where("lesson", "==", lesson)
             .where("isLatest", "==", true).get();
@@ -336,8 +373,6 @@
             document.getElementById('observation').value = '';
             document.getElementById('question').value = '';
         }
-
-        loadStudentHistory(school, grade, cNum, sNum, unit);
     }
 
     async function loadStudentHistory(school, grade, cNum, sNum, unit) {
@@ -372,20 +407,16 @@
     }
 
     async function saveData() {
-        if (!validateStudent()) return;
-
-        const school = document.getElementById('schoolSelect').value;
-        const grade = parseInt(document.getElementById('gradeSelect').value);
-        const classNum = parseInt(document.getElementById('classSelect').value);
-        const studentNum = parseInt(document.getElementById('studentNum').value);
+        if (!currentStudentId) {
+            alert("본인 확인이 풀렸습니다. 새로고침 후 다시 로그인해주세요."); return;
+        }
+        const student = allStudents.find(s => s.id === currentStudentId);
         const unit = parseInt(document.getElementById('unitSelect').value);
         const select = document.getElementById('lessonSelect');
         const lesson = parseInt(select.value);
         
-        // select.options[select.selectedIndex].text 에서 "[X단원 Y차시] " 부분 제거
         const fullText = select.options[select.selectedIndex].text;
         const topic = fullText.substring(fullText.indexOf("]") + 2);
-        
         const observation = document.getElementById('observation').value;
         const question = document.getElementById('question').value;
 
@@ -395,10 +426,10 @@
 
         try {
             const snapshot = await db.collection("questions")
-                .where("schoolCode", "==", school)
-                .where("grade", "==", grade)
-                .where("classNum", "==", classNum)
-                .where("studentNum", "==", studentNum)
+                .where("schoolCode", "==", student.schoolCode)
+                .where("grade", "==", student.grade)
+                .where("classNum", "==", student.classNum)
+                .where("studentNum", "==", student.studentNum)
                 .where("unit", "==", unit)
                 .where("lesson", "==", lesson)
                 .where("isLatest", "==", true).get();
@@ -408,22 +439,33 @@
 
             const newRef = db.collection("questions").doc();
             batch.set(newRef, {
-                schoolCode: school, grade: grade, classNum: classNum, studentNum: studentNum,
+                schoolCode: student.schoolCode, grade: student.grade, 
+                classNum: student.classNum, studentNum: student.studentNum,
                 unit: unit, lesson: lesson, topic: topic,
                 observation: observation, question: question,
                 isLatest: true, createdAt: firebase.firestore.FieldValue.serverTimestamp()
             });
 
             await batch.commit(); 
-            
             alert("기록이 성공적으로 저장되었습니다!");
-            loadStudentHistory(school, grade, classNum, studentNum, unit);
+            loadStudentHistory(student.schoolCode, student.grade, student.classNum, student.studentNum, unit);
             
         } catch (error) {
-            console.error(error);
-            alert("저장 실패! 서버 접속 오류나 권한 문제가 있습니다.\n에러: " + error.message);
+            alert("저장 실패! 에러: " + error.message);
         }
     }
+
+    // --- 교사 대시보드 ---
+    let timer;
+    function startTimer() { 
+        timer = setTimeout(() => { 
+            document.getElementById('student-view').style.display = 'none';
+            document.getElementById('teacher-view').style.display = 'block';
+            loadTeacherData(); 
+            loadRegisteredStudents();
+        }, 2000); 
+    }
+    function clearTimer() { clearTimeout(timer); }
 
     function showSection(sectionId) {
         document.getElementById('section-qna').style.display = sectionId === 'qna' ? 'block' : 'none';
@@ -438,7 +480,6 @@
         
         try {
             const snapshot = await db.collection("questions").where("isLatest", "==", true).get();
-
             allLatestQuestions = [];
             let schoolSet = new Set();
             
@@ -469,7 +510,6 @@
         Array.from(classSet).sort((a,b)=>a-b).forEach(cNum => {
             classFilter.innerHTML += `<option value="${cNum}">${cNum}반</option>`;
         });
-        
         renderQuestionTable();
     }
 
@@ -507,6 +547,18 @@
         });
     }
 
+    async function resetPin(docId) {
+        if(!confirm("이 학생의 비밀번호를 '0000'으로 강제 초기화하시겠습니까?")) return;
+        try {
+            await db.collection("students").doc(docId).update({ pin: "0000" });
+            const student = allStudents.find(s => s.id === docId);
+            if(student) student.pin = "0000";
+            alert("비밀번호가 '0000'으로 초기화되었습니다.");
+        } catch(e) {
+            alert("초기화 실패: " + e.message);
+        }
+    }
+
     async function registerStudent() {
         const school = document.getElementById('regSchool').value.trim();
         const grade = parseInt(document.getElementById('regGrade').value);
@@ -526,13 +578,13 @@
         }
 
         try {
-            const newStudent = { schoolCode: school, grade: grade, classNum: classNum, studentNum: studentNum };
-            
-            await db.collection("students").add({
+            const newStudent = { schoolCode: school, grade: grade, classNum: classNum, studentNum: studentNum, pin: "0000" };
+            const docRef = await db.collection("students").add({
                 ...newStudent,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             });
 
+            newStudent.id = docRef.id;
             allStudents.push(newStudent);
             alert(`[${school}] ${grade}학년 ${classNum}반 ${studentNum}번 학생 등록 완료!`);
             
@@ -541,9 +593,8 @@
             
             loadRegisteredStudents();
             populateSchoolDropdown();
-            
         } catch(error) {
-            alert("학생 등록 실패! Firebase 규칙 또는 연결을 확인하세요.\n" + error.message);
+            alert("등록 실패! 에러: " + error.message);
         }
     }
 
@@ -551,24 +602,18 @@
         const fileInput = document.getElementById('excelFileInput');
         const file = fileInput.files[0];
         if (!file) {
-            alert("엑셀 파일을 선택해주세요.");
-            return;
+            alert("엑셀 파일을 선택해주세요."); return;
         }
 
         const reader = new FileReader();
         reader.onload = async function(e) {
             const data = new Uint8Array(e.target.result);
             const workbook = XLSX.read(data, {type: 'array'});
-            const firstSheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[firstSheetName];
-            
+            const worksheet = workbook.Sheets[workbook.SheetNames[0]];
             const jsonData = XLSX.utils.sheet_to_json(worksheet, {defval: ""});
 
-            let addedCount = 0;
-            let duplicateCount = 0;
-            let errorCount = 0;
-            let newStudentsArray = []; 
-
+            let addedCount = 0; let duplicateCount = 0; let errorCount = 0;
+            let newStudentsArray = [];
             const batch = db.batch();
             let batchCount = 0;
 
@@ -579,8 +624,7 @@
                 let numKey = Object.keys(row).find(k => k.trim() === "번호");
 
                 if (!schoolKey || !gradeKey || !classKey || !numKey) {
-                    errorCount++;
-                    continue;
+                    errorCount++; continue;
                 }
 
                 const school = String(row[schoolKey]).trim();
@@ -589,8 +633,7 @@
                 const studentNum = parseInt(row[numKey]);
 
                 if (!school || isNaN(grade) || isNaN(classNum) || isNaN(studentNum)) {
-                    errorCount++;
-                    continue;
+                    errorCount++; continue;
                 }
 
                 const isDuplicate = allStudents.some(s => 
@@ -601,17 +644,15 @@
                 if (isDuplicate) {
                     duplicateCount++;
                 } else {
-                    const newStudent = { schoolCode: school, grade: grade, classNum: classNum, studentNum: studentNum };
+                    const newStudent = { schoolCode: school, grade: grade, classNum: classNum, studentNum: studentNum, pin: "0000" };
                     const docRef = db.collection("students").doc();
-                    
                     batch.set(docRef, {
                         ...newStudent,
                         createdAt: firebase.firestore.FieldValue.serverTimestamp()
                     });
-                    
+                    newStudent.id = docRef.id;
                     newStudentsArray.push(newStudent);
-                    addedCount++;
-                    batchCount++;
+                    addedCount++; batchCount++;
                 }
             }
 
@@ -620,15 +661,12 @@
                     await batch.commit(); 
                     allStudents.push(...newStudentsArray); 
                 }
-
                 alert(`엑셀 업로드 완료!\n\n- 신규 등록: ${addedCount}명\n- 중복 제외: ${duplicateCount}명\n- 양식 오류: ${errorCount}명`);
                 fileInput.value = "";
                 loadRegisteredStudents();
                 populateSchoolDropdown();
-                
             } catch (error) {
-                console.error(error);
-                alert("엑셀 업로드 실패! Firebase 규칙을 확인해주세요.\n(에러 내용: " + error.message + ")");
+                alert("엑셀 업로드 실패! 에러: " + error.message);
             }
         };
         reader.readAsArrayBuffer(file);
@@ -638,34 +676,27 @@
         const tbody = document.getElementById('students-tbody');
         tbody.innerHTML = '<tr><td colspan="5">명단 불러오는 중...</td></tr>';
         
-        try {
-            const snapshot = await db.collection("students").get();
-            let students = [];
-            snapshot.forEach(doc => students.push(doc.data()));
-            
-            students.sort((a, b) => {
-                if(a.schoolCode !== b.schoolCode) return a.schoolCode.localeCompare(b.schoolCode);
-                if(a.grade !== b.grade) return a.grade - b.grade;
-                if(a.classNum !== b.classNum) return a.classNum - b.classNum;
-                return a.studentNum - b.studentNum;
-            });
+        let students = [...allStudents];
+        students.sort((a, b) => {
+            if(a.schoolCode !== b.schoolCode) return a.schoolCode.localeCompare(b.schoolCode);
+            if(a.grade !== b.grade) return a.grade - b.grade;
+            if(a.classNum !== b.classNum) return a.classNum - b.classNum;
+            return a.studentNum - b.studentNum;
+        });
 
-            tbody.innerHTML = '';
-            if(students.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5">등록된 학생이 없습니다.</td></tr>';
-                return;
-            }
-
-            students.forEach(d => {
-                const dateStr = d.createdAt ? d.createdAt.toDate().toLocaleString() : "방금 전";
-                tbody.innerHTML += `<tr>
-                    <td>${d.schoolCode}</td><td>${d.grade}</td><td>${d.classNum}</td>
-                    <td>${d.studentNum}</td><td>${dateStr}</td>
-                </tr>`;
-            });
-        } catch (error) {
-            tbody.innerHTML = '<tr><td colspan="5">에러: ' + error.message + '</td></tr>';
+        tbody.innerHTML = '';
+        if(students.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5">등록된 학생이 없습니다.</td></tr>';
+            return;
         }
+
+        students.forEach(d => {
+            tbody.innerHTML += `<tr>
+                <td>${d.schoolCode}</td><td>${d.grade}</td><td>${d.classNum}</td>
+                <td>${d.studentNum}</td>
+                <td><button class="btn-reset" onclick="resetPin('${d.id}')">비밀번호 초기화</button></td>
+            </tr>`;
+        });
     }
 
     async function downloadExcel() {
