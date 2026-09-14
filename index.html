@@ -559,6 +559,43 @@
         }
     }
 
+async function deleteStudent(docId) {
+    const s = allStudents.find(x => x.id === docId);
+    if (!s) return;
+
+    const label = `[${s.schoolCode}] ${s.grade}학년 ${s.classNum}반 ${s.studentNum}번`;
+
+    // 이 학생 이름으로 남아 있는 질문 기록이 몇 건인지 먼저 세어 보여준다.
+    let cnt = 0;
+    try {
+        const snap = await db.collection("questions")
+            .where("schoolCode", "==", s.schoolCode)
+            .where("grade", "==", s.grade)
+            .where("classNum", "==", s.classNum)
+            .where("studentNum", "==", s.studentNum)
+            .get();
+        cnt = snap.size;
+    } catch (e) {
+        if (!confirm(`${label}\n\n질문 기록 수를 확인하지 못했습니다.\n그래도 명단에서 삭제할까요?`)) return;
+    }
+
+    const msg = cnt > 0
+        ? `${label} 을 명단에서 삭제할까요?\n\n※ 이 번호로 저장된 질문 기록 ${cnt}건은 그대로 남습니다.\n   교사 대시보드와 엑셀에서 계속 보입니다.\n   다만 이 학생은 더 이상 로그인할 수 없습니다.`
+        : `${label} 을 명단에서 삭제할까요?\n\n이 번호로 저장된 질문 기록은 없습니다.`;
+
+    if (!confirm(msg)) return;
+
+    try {
+        await db.collection("students").doc(docId).delete();
+        allStudents = allStudents.filter(x => x.id !== docId);
+        loadRegisteredStudents();
+        populateSchoolDropdown();
+        alert("명단에서 삭제했습니다.");
+    } catch (e) {
+        alert("삭제 실패: " + e.message);
+    }
+}
+    
     async function registerStudent() {
         const school = document.getElementById('regSchool').value.trim();
         const grade = parseInt(document.getElementById('regGrade').value);
