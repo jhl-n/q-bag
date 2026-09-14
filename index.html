@@ -695,6 +695,8 @@
                 <td>${d.schoolCode}</td><td>${d.grade}</td><td>${d.classNum}</td>
                 <td>${d.studentNum}</td>
                 <td><button class="btn-reset" onclick="resetPin('${d.id}')">비밀번호 초기화</button></td>
+        <td><button class="btn-reset" style="background:#7f8c8d;"
+            onclick="deleteStudent('${d.id}')">명단에서 삭제</button></td>
             </tr>`;
         });
     }
