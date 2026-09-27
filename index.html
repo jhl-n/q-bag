@@ -68,6 +68,7 @@
     
     <div id="input-area" style="display:none;">
         <label>수업에서 관찰하거나 실험한 내용</label>
+        <label id="obsLabel">수업에서 관찰하거나 실험한 내용</label>
         <textarea id="observation" rows="3"></textarea>
         <label>그것을 통해 궁금한 것 (질문)</label>
         <textarea id="question" rows="3"></textarea>
@@ -174,7 +175,8 @@
             "3": "양초와 알코올이 탈 때 나타나는 공통점",
             "4": "물질이 타려면 무엇이 필요할까요 (1)",
             "5": "물질이 타려면 무엇이 필요할까요 (2)",
-            "6": "물질이 연소할 때 무엇이 생길까요"
+            "6": "물질이 연소할 때 무엇이 생길까요",
+            "7": "기사 한 편 제대로 읽기"
         },
         "3": {
             "1": "전기로 움직이는 병뚜껑 장난감 만들기",
@@ -355,7 +357,9 @@
         if(isNaN(unit) || isNaN(lesson)) return;
         
         document.getElementById('input-area').style.display = 'block';
-
+        document.getElementById('obsLabel').textContent =
+            (unit === 2 && lesson === 7) ? '기사를 읽고 알게 된 내용' : '수업에서 관찰하거나 실험한 내용';
+        
         const snapshot = await db.collection("questions")
             .where("schoolCode", "==", student.schoolCode)
             .where("grade", "==", student.grade)
