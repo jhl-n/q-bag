@@ -67,7 +67,6 @@
     </select>
     
     <div id="input-area" style="display:none;">
-        <label>수업에서 관찰하거나 실험한 내용</label>
         <label id="obsLabel">수업에서 관찰하거나 실험한 내용</label>
         <textarea id="observation" rows="3"></textarea>
         <label>그것을 통해 궁금한 것 (질문)</label>
@@ -425,7 +424,7 @@
         const question = document.getElementById('question').value;
 
         if(!observation || !question) {
-            alert("관찰 내용과 질문을 모두 입력해주세요!"); return;
+            alert("내용과 질문을 모두 입력해주세요!"); return;
         }
 
         try {
