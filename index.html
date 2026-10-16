@@ -50,6 +50,10 @@
         .q-cell { text-align: left; overflow-wrap: anywhere; }
         .q-cell .more { color: #2980b9; cursor: pointer; font-size: 12px; margin-left: 4px; white-space: nowrap; }
         .dup-note { font-size: 12px; color: #7f8c8d; }
+        tr.row-hidden td { background: #f4f6f6; color: #b2babb; }
+        .row-hide-btn { width: auto; margin: 0; padding: 4px 10px; font-size: 12px; background: #95a5a6; white-space: nowrap; }
+        .row-hide-btn:hover { background: #e74c3c; }
+        tr.row-hidden .row-hide-btn { background: #2980b9; }
 
         /* ── 공유 화면(교실 화면에 띄우기) ── */
         #share-view { display: none; position: fixed; inset: 0; background: #1f2a36; z-index: 1000; overflow: auto; padding: 24px; box-sizing: border-box; color: #fff; }
@@ -162,10 +166,10 @@
         
         <table id="teacher-table">
             <thead>
-                <tr><th>학교</th><th>학년-반</th><th>번호</th><th>단원</th><th>차시</th><th>관찰내용</th><th>질문</th><th>기록일시</th></tr>
+                <tr><th>학교</th><th>학년-반</th><th>번호</th><th>단원</th><th>차시</th><th>관찰내용</th><th>질문</th><th>기록일시</th><th>숨김</th></tr>
             </thead>
             <tbody id="teacher-tbody">
-                <tr><td colspan="8">학교와 학급을 먼저 선택하세요.</td></tr>
+                <tr><td colspan="9">학교와 학급을 먼저 선택하세요.</td></tr>
             </tbody>
         </table>
     </div>
@@ -260,8 +264,11 @@
     const TABLE_LIMIT = 150;  // 교사 표에서 이 글자 수를 넘으면 접어서 보여 줌
 
     // 이모지도 한 글자로 세어 자르기
+    const EMOJI_RE = /\p{Extended_Pictographic}/u;
     function clip(text, limit, key) {
         const chars = Array.from(String(text || ''));
+        // 이모지가 10개를 넘는 글은 30자에서 접음
+        if (chars.filter(c => EMOJI_RE.test(c)).length > 10) limit = Math.min(limit, 30);
         if (chars.length <= limit || expanded.has(key)) {
             const tail = chars.length > limit ? ` <span class="more" onclick="toggleMore('${key}')">접기</span>` : '';
             return esc(chars.join('')) + tail;
@@ -717,7 +724,7 @@
             status.className = 'live-status';
             status.textContent = '학교와 학급을 고르면 질문을 불러옵니다.';
             document.getElementById('status-area').innerHTML = '';
-            tbody.innerHTML = '<tr><td colspan="8">학교와 학급을 먼저 선택하세요.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9">학교와 학급을 먼저 선택하세요.</td></tr>';
             renderShare();
             return;
         }
@@ -732,7 +739,7 @@
 
         status.className = 'live-status';
         status.textContent = '불러오는 중...';
-        tbody.innerHTML = '<tr><td colspan="8">데이터 불러오는 중...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9">데이터 불러오는 중...</td></tr>';
 
         questionUnsub = q.onSnapshot(snap => {
             const raw = snap.docs.map(d => Object.assign({ _id: d.id }, d.data()));
@@ -744,7 +751,7 @@
         }, err => {
             status.className = 'live-status';
             status.textContent = '연결 오류';
-            tbody.innerHTML = '<tr><td colspan="8">에러: ' + esc(err.message) + '</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9">에러: ' + esc(err.message) + '</td></tr>';
         });
     }
 
@@ -817,17 +824,21 @@
             (a.unit - b.unit) || (a.lesson - b.lesson) || (a.studentNum - b.studentNum));
 
         if (data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8">아직 올라온 질문이 없습니다.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9">아직 올라온 질문이 없습니다.</td></tr>';
             return;
         }
 
         let rows = '';
         data.forEach(d => {
             const dateStr = d.createdAt ? d.createdAt.toDate().toLocaleString() : "방금 전";
-            rows += `<tr>
+            rows += `<tr class="${shareHidden.has(d._id) ? 'row-hidden' : ''}">
                 <td>${esc(d.schoolCode)}</td><td>${esc(d.grade)}-${esc(d.classNum)}</td><td>${esc(d.studentNum)}</td>
                 <td>${esc(d.unit)}단원</td><td>${esc(d.lesson)}차시</td>
-                <td class="q-cell">${clip(d.observation, TABLE_LIMIT, 't-o-' + d._id)}</td><td class="q-cell">${clip(d.question, TABLE_LIMIT, 't-q-' + d._id)}</td><td>${esc(dateStr)}</td>
+                ${shareHidden.has(d._id)
+                    ? `<td class="q-cell" colspan="2">숨긴 글입니다 (공유 화면에도 나오지 않음, 저장된 자료는 그대로)</td>`
+                    : `<td class="q-cell">${clip(d.observation, TABLE_LIMIT, 't-o-' + d._id)}</td><td class="q-cell">${clip(d.question, TABLE_LIMIT, 't-q-' + d._id)}</td>`}
+                <td>${esc(dateStr)}</td>
+                <td><button class="row-hide-btn" onclick="toggleHide('${esc(d._id)}')">${shareHidden.has(d._id) ? '다시 보기' : '숨기기'}</button></td>
             </tr>`;
         });
         tbody.innerHTML = rows;
@@ -900,12 +911,20 @@
         grid.innerHTML = html;
     }
 
+    // 숨김은 교사 표와 공유 화면에 함께 적용 (이 화면에서만, 새로고침하면 풀림)
     function hideShare(id) {
         shareHidden.add(id);
+        renderQuestionTable();
+        renderShare();
+    }
+    function toggleHide(id) {
+        shareHidden.has(id) ? shareHidden.delete(id) : shareHidden.add(id);
+        renderQuestionTable();
         renderShare();
     }
     function unhideAll() {
         shareHidden.clear();
+        renderQuestionTable();
         renderShare();
     }
 
