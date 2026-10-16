@@ -26,9 +26,42 @@
         table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
         th { background-color: #34495e; color: white; }
-        .dashboard-header { display: flex; justify-content: space-between; align-items: center; background: #ecf0f1; padding: 10px; border-radius: 5px; }
+        .dashboard-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; background: #ecf0f1; padding: 10px; border-radius: 5px; }
         .reg-box { background: #fdfefe; padding: 15px; border: 1px solid #bdc3c7; border-radius: 5px; margin-top: 20px; }
         .info-text { font-size: 13px; color: #7f8c8d; margin-top: -5px; margin-bottom: 10px; display: block; }
+
+        /* ── 교사 화면: 학급·단원·차시 보기 ── */
+        .filter-bar { margin: 15px 0; padding: 10px; background: #ecf0f1; border-radius: 5px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        .filter-bar select { width: auto; margin: 0; }
+        .filter-bar button { margin: 0; }
+        .live-status { font-size: 13px; color: #7f8c8d; }
+        .live-status.on { color: #27ae60; font-weight: bold; }
+        .status-box { margin: 10px 0; padding: 14px; background: #fff; border: 1px solid #ddd; border-radius: 6px; }
+        .status-box h4 { margin: 0 0 10px 0; color: #2c3e50; }
+        .num-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+        .num-cell { width: 46px; height: 46px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 2px solid #bdc3c7; background: #fff; color: #95a5a6; }
+        .num-cell.done { background: #27ae60; border-color: #27ae60; color: #fff; }
+        .missing { color: #c0392b; font-weight: bold; margin-top: 10px; }
+        .all-done { color: #27ae60; font-weight: bold; margin-top: 10px; }
+        .matrix { margin-top: 0; }
+        .matrix td.done { background: #d5f5e3; color: #1e8449; font-weight: bold; }
+        .matrix td.miss { background: #fdedec; }
+        .matrix tr.sum td { background: #ecf0f1; font-weight: bold; }
+        .q-cell { text-align: left; }
+
+        /* ── 공유 화면(교실 화면에 띄우기) ── */
+        #share-view { display: none; position: fixed; inset: 0; background: #1f2a36; z-index: 1000; overflow: auto; padding: 24px; box-sizing: border-box; color: #fff; }
+        .share-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+        .share-top h2 { margin: 0; font-size: 28px; }
+        .share-ctrl { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+        .share-ctrl label { font-size: 16px; display: flex; align-items: center; gap: 4px; cursor: pointer; }
+        .share-ctrl input { width: auto; margin: 0; }
+        .share-ctrl button { margin: 0; }
+        .share-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+        .share-card { background: #fff; color: #2c3e50; border-radius: 12px; padding: 20px; font-size: 24px; line-height: 1.5; word-break: keep-all; }
+        .share-card .tag { font-size: 15px; color: #7f8c8d; margin-bottom: 6px; }
+        .share-card .obs { font-size: 17px; color: #555; margin-top: 12px; padding-top: 10px; border-top: 1px dashed #ddd; }
+        .share-empty { font-size: 22px; color: #bdc3c7; text-align: center; margin-top: 60px; }
     </style>
 </head>
 <body>
@@ -86,7 +119,8 @@
     <div class="dashboard-header">
         <h2>👨‍🏫 교사 대시보드</h2>
         <div>
-            <button class="btn-teacher" onclick="downloadExcel()">📥 전체 엑셀 다운로드</button>
+            <button class="btn-teacher" onclick="downloadClassExcel()">📥 선택 학급 엑셀</button>
+            <button class="btn-teacher" style="background:#34495e;" onclick="downloadExcel()">📥 전체 엑셀</button>
             <button style="background:#7f8c8d; width:auto; display:inline-block;" onclick="location.reload()">🏠 학생 화면으로</button>
         </div>
     </div>
@@ -96,24 +130,36 @@
         <button class="btn-teacher" style="background:#d35400;" onclick="showSection('register')">👥 학생 명단 등록 관리</button>
     </div>
 
-    <!-- 1. 질문 확인 섹션 -->
+    <!-- 1. 질문 확인 섹션 : 학급을 먼저 고르면 그 범위만 읽고, 이후 새 질문은 실시간 반영 -->
     <div id="section-qna">
-        <div style="margin: 15px 0; padding: 10px; background: #ecf0f1; border-radius: 5px;">
-            <label style="font-weight: bold; margin-right:10px;">학교/학급 필터:</label>
-            <select id="teacherSchoolFilter" style="width: auto; display: inline-block;" onchange="updateTeacherClassFilter()">
-                <option value="all">전체 학교</option>
+        <div class="filter-bar">
+            <select id="tSchool" onchange="onTeacherSchoolChange()">
+                <option value="">학교 선택</option>
             </select>
-            <select id="teacherClassFilter" style="width: auto; display: inline-block;" onchange="renderQuestionTable()">
-                <option value="all">전체 학급</option>
+            <select id="tClass" onchange="onTeacherFilterChange()">
+                <option value="">학년-반 선택</option>
             </select>
-            <button class="btn-refresh" onclick="loadTeacherData()">🔄 새로고침</button>
+            <select id="tUnit" onchange="onTeacherUnitChange()">
+                <option value="all">전체 단원</option>
+                <option value="2">2단원. 물질의 연소</option>
+                <option value="3">3단원. 전기의 이용</option>
+            </select>
+            <select id="tLesson" onchange="onTeacherFilterChange()" disabled>
+                <option value="all">전체 차시</option>
+            </select>
+            <button class="btn-teacher" style="background:#16a085;" onclick="openShare()">🖥️ 공유 화면</button>
+            <span id="liveStatus" class="live-status">학교와 학급을 고르면 질문을 불러옵니다.</span>
         </div>
+
+        <div id="status-area"></div>
         
         <table id="teacher-table">
             <thead>
                 <tr><th>학교</th><th>학년-반</th><th>번호</th><th>단원</th><th>차시</th><th>관찰내용</th><th>질문</th><th>기록일시</th></tr>
             </thead>
-            <tbody id="teacher-tbody"></tbody>
+            <tbody id="teacher-tbody">
+                <tr><td colspan="8">학교와 학급을 먼저 선택하세요.</td></tr>
+            </tbody>
         </table>
     </div>
 
@@ -152,6 +198,20 @@
     </div>
 </div>
 
+<!-- 공유 화면 : 교실 화면에 띄워 학생들과 함께 보기 (기본은 번호 숨김) -->
+<div id="share-view">
+    <div class="share-top">
+        <h2 id="shareTitle"></h2>
+        <div class="share-ctrl">
+            <label><input type="checkbox" id="shareShowNum" onchange="renderShare()"> 번호 표시</label>
+            <label><input type="checkbox" id="shareShowObs" onchange="renderShare()"> 관찰 내용 표시</label>
+            <span id="shareCount"></span>
+            <button class="btn-refresh" onclick="closeShare()">✕ 닫기</button>
+        </div>
+    </div>
+    <div id="shareGrid" class="share-grid"></div>
+</div>
+
 <script>
     const firebaseConfig = {
       apiKey: "AIzaSyCmPXPSMbCTJxhIupBf0_0uLdM6CMgA_rM",
@@ -168,18 +228,21 @@
     const db = firebase.firestore();
 
     // ───────────────────────────────────────────────
-    // [변경] 데이터 보관 방식
+    // 데이터 보관 방식
     //  roster      : 드롭다운용 명단 요약 (학교·학년·반·번호만, 비밀번호 없음)
     //                meta/roster 문서 1개를 읽어서 채움 → 접속 1회당 읽기 1건
-    //  allStudents : 교사 화면에서만 쓰는 전체 명단 (비밀번호 관리용)
+    //  allStudents : 교사 화면 '명단 관리' 탭에서만 쓰는 전체 명단 (탭을 처음 열 때 읽음)
     //  currentStudent : 본인 확인을 마친 학생 1명의 정보
+    //  classQuestions : 교사가 고른 학급·단원·차시의 최신 질문 (실시간 반영)
     // ───────────────────────────────────────────────
     let roster = [];
     let allStudents = [];
-    let allLatestQuestions = [];
     let currentStudentId = null;
     let currentStudent = null;
-    let teacherLoaded = false;
+    let studentsLoaded = false;
+
+    let classQuestions = [];
+    let questionUnsub = null;
 
     const ROSTER_REF = db.collection("meta").doc("roster");
 
@@ -212,7 +275,7 @@
         }
     };
 
-    // [변경] 처음 열 때 명단 요약 문서 1개만 읽음
+    // 처음 열 때 명단 요약 문서 1개만 읽음
     async function initApp() {
         try {
             const doc = await ROSTER_REF.get();
@@ -313,7 +376,7 @@
     }
 
     // --- 학생 로그인 및 인증 ---
-    // [변경] 본인 확인 때 해당 학생 1명의 문서만 읽음
+    // 본인 확인 때 해당 학생 1명의 문서만 읽음
     async function verifyStudent() {
         const school = document.getElementById('schoolSelect').value;
         const grade = parseInt(document.getElementById('gradeSelect').value);
@@ -522,107 +585,266 @@
         }
     }
 
-    // --- 교사 대시보드 ---
+    // ═══════════════════════════════════════════════
+    // 교사 대시보드
+    // ═══════════════════════════════════════════════
     let timer;
     function startTimer() { 
         timer = setTimeout(openTeacherView, 3000); 
     }
     function clearTimer() { clearTimeout(timer); }
 
-    // [변경] 교사 화면을 처음 열 때만 전체 데이터를 읽음. 이후엔 '새로고침' 버튼으로만 다시 읽음
-    async function openTeacherView() {
+    // [변경] 교사 화면을 열 때 아무것도 미리 읽지 않음.
+    //        학교·학급 선택 목록은 이미 읽어 둔 명단 요약(roster)으로 채움.
+    function openTeacherView() {
         document.getElementById('student-view').style.display = 'none';
         document.getElementById('teacher-view').style.display = 'block';
-        if (!teacherLoaded) {
-            teacherLoaded = true;
-            await Promise.all([loadTeacherData(), reloadStudents()]);
-        }
+        populateTeacherSchool();
     }
 
-    // [변경] 탭 전환은 화면만 바꾸고 다시 읽지 않음
+    // [변경] 명단 관리 탭은 처음 열 때만 전체 명단을 읽음
     function showSection(sectionId) {
         document.getElementById('section-qna').style.display = sectionId === 'qna' ? 'block' : 'none';
         document.getElementById('section-register').style.display = sectionId === 'register' ? 'block' : 'none';
-    }
-
-    async function loadTeacherData() {
-        const tbody = document.getElementById('teacher-tbody');
-        tbody.innerHTML = '<tr><td colspan="8">데이터 불러오는 중...</td></tr>';
-        
-        try {
-            const snapshot = await db.collection("questions").where("isLatest", "==", true).get();
-            allLatestQuestions = [];
-            let schoolSet = new Set();
-            
-            snapshot.forEach(doc => {
-                let data = doc.data();
-                allLatestQuestions.push(data);
-                schoolSet.add(data.schoolCode);
-            });
-
-            const schoolFilter = document.getElementById('teacherSchoolFilter');
-            const prevSchool = schoolFilter.value;
-            schoolFilter.innerHTML = '<option value="all">전체 학교</option>';
-            schoolSet.forEach(s => schoolFilter.innerHTML += `<option value="${esc(s)}">${esc(s)}</option>`);
-            if (prevSchool && schoolSet.has(prevSchool)) schoolFilter.value = prevSchool;
-            
-            updateTeacherClassFilter();
-        } catch (error) {
-            tbody.innerHTML = '<tr><td colspan="8">에러: ' + esc(error.message) + '</td></tr>';
+        if (sectionId === 'register' && !studentsLoaded) {
+            reloadStudents();
         }
     }
 
-    function updateTeacherClassFilter() {
-        const selectedSchool = document.getElementById('teacherSchoolFilter').value;
-        const classFilter = document.getElementById('teacherClassFilter');
-        
-        let filteredData = selectedSchool === 'all' ? allLatestQuestions : allLatestQuestions.filter(q => q.schoolCode === selectedSchool);
-        let classSet = new Set(filteredData.map(q => q.classNum));
+    // --- 학급·단원·차시 선택 ---
+    function populateTeacherSchool() {
+        const sel = document.getElementById('tSchool');
+        const prev = sel.value;
+        const schools = Array.from(new Set(roster.map(s => s.schoolCode)));
+        sel.innerHTML = '<option value="">학교 선택</option>';
+        schools.forEach(s => sel.innerHTML += `<option value="${esc(s)}">${esc(s)}</option>`);
+        if (prev && schools.includes(prev)) sel.value = prev;
+    }
 
-        classFilter.innerHTML = '<option value="all">전체 학급</option>';
-        Array.from(classSet).sort((a,b)=>a-b).forEach(cNum => {
-            classFilter.innerHTML += `<option value="${cNum}">${cNum}반</option>`;
+    function onTeacherSchoolChange() {
+        const school = document.getElementById('tSchool').value;
+        const sel = document.getElementById('tClass');
+        const pairs = new Map();
+        roster.filter(s => s.schoolCode === school).forEach(s => {
+            pairs.set(`${s.grade}-${s.classNum}`, [s.grade, s.classNum]);
         });
+        const sorted = Array.from(pairs.values()).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+        sel.innerHTML = '<option value="">학년-반 선택</option>';
+        sorted.forEach(([g, c]) => sel.innerHTML += `<option value="${g}-${c}">${g}학년 ${c}반</option>`);
+        onTeacherFilterChange();
+    }
+
+    function onTeacherUnitChange() {
+        const unit = document.getElementById('tUnit').value;
+        const sel = document.getElementById('tLesson');
+        sel.innerHTML = '<option value="all">전체 차시</option>';
+        if (unit !== 'all') {
+            for (const [num, topic] of Object.entries(LESSON_DATA[unit])) {
+                sel.innerHTML += `<option value="${num}">${num}차시. ${esc(topic)}</option>`;
+            }
+            sel.disabled = false;
+        } else {
+            sel.disabled = true;
+        }
+        onTeacherFilterChange();
+    }
+
+    function getTeacherFilter() {
+        const school = document.getElementById('tSchool').value;
+        const gc = document.getElementById('tClass').value;
+        const unit = document.getElementById('tUnit').value;
+        const lesson = document.getElementById('tLesson').value;
+        if (!school || !gc) return null;
+        const [grade, classNum] = gc.split('-').map(Number);
+        return {
+            school, grade, classNum,
+            unit: unit === 'all' ? null : parseInt(unit),
+            lesson: (unit === 'all' || lesson === 'all') ? null : parseInt(lesson)
+        };
+    }
+
+    // [핵심] 고른 학급(·단원·차시)의 최신 질문만 읽고, 이후 바뀐 것만 실시간으로 받음
+    function onTeacherFilterChange() {
+        if (questionUnsub) { questionUnsub(); questionUnsub = null; }
+        classQuestions = [];
+        const f = getTeacherFilter();
+        const status = document.getElementById('liveStatus');
+        const tbody = document.getElementById('teacher-tbody');
+
+        if (!f) {
+            status.className = 'live-status';
+            status.textContent = '학교와 학급을 고르면 질문을 불러옵니다.';
+            document.getElementById('status-area').innerHTML = '';
+            tbody.innerHTML = '<tr><td colspan="8">학교와 학급을 먼저 선택하세요.</td></tr>';
+            renderShare();
+            return;
+        }
+
+        let q = db.collection("questions")
+            .where("schoolCode", "==", f.school)
+            .where("grade", "==", f.grade)
+            .where("classNum", "==", f.classNum)
+            .where("isLatest", "==", true);
+        if (f.unit !== null) q = q.where("unit", "==", f.unit);
+        if (f.lesson !== null) q = q.where("lesson", "==", f.lesson);
+
+        status.className = 'live-status';
+        status.textContent = '불러오는 중...';
+        tbody.innerHTML = '<tr><td colspan="8">데이터 불러오는 중...</td></tr>';
+
+        questionUnsub = q.onSnapshot(snap => {
+            classQuestions = snap.docs.map(d => d.data());
+            status.className = 'live-status on';
+            status.textContent = `● 실시간 반영 중 (${classQuestions.length}건)`;
+            renderTeacherAll();
+        }, err => {
+            status.className = 'live-status';
+            status.textContent = '연결 오류';
+            tbody.innerHTML = '<tr><td colspan="8">에러: ' + esc(err.message) + '</td></tr>';
+        });
+    }
+
+    function renderTeacherAll() {
+        renderSubmitStatus();
         renderQuestionTable();
+        renderShare();
+    }
+
+    function classRosterNums(f) {
+        return Array.from(new Set(roster
+            .filter(s => s.schoolCode === f.school && s.grade === f.grade && s.classNum === f.classNum)
+            .map(s => s.studentNum))).sort((a, b) => a - b);
+    }
+
+    // --- 제출 현황 : 차시를 고르면 번호 격자, 단원만 고르면 번호×차시 표 ---
+    function renderSubmitStatus() {
+        const area = document.getElementById('status-area');
+        const f = getTeacherFilter();
+        if (!f) { area.innerHTML = ''; return; }
+        const nums = classRosterNums(f);
+
+        if (f.lesson !== null) {
+            const done = new Set(classQuestions.map(q => q.studentNum));
+            const missing = nums.filter(n => !done.has(n));
+            const submitted = nums.length - missing.length;
+            let html = `<div class="status-box"><h4>${f.unit}단원 ${f.lesson}차시 제출 현황: ${submitted} / ${nums.length}명</h4><div class="num-grid">`;
+            nums.forEach(n => {
+                html += `<div class="num-cell ${done.has(n) ? 'done' : ''}">${esc(n)}</div>`;
+            });
+            html += '</div>';
+            html += missing.length
+                ? `<div class="missing">아직 안 올린 번호: ${missing.map(n => esc(n) + '번').join(', ')}</div>`
+                : (nums.length ? '<div class="all-done">모두 제출했습니다 👏</div>' : '');
+            html += '</div>';
+            area.innerHTML = html;
+            return;
+        }
+
+        if (f.unit !== null) {
+            const lessons = Object.keys(LESSON_DATA[f.unit]).map(Number);
+            const doneSet = new Set(classQuestions.map(q => `${q.studentNum}-${q.lesson}`));
+            let html = `<div class="status-box"><h4>${f.unit}단원 차시별 제출 현황 (✓ 제출, 빈칸 미제출)</h4><div style="overflow-x:auto;"><table class="matrix"><thead><tr><th>번호</th>`;
+            lessons.forEach(l => html += `<th>${l}차시</th>`);
+            html += '<th>합계</th></tr></thead><tbody>';
+            const colCount = lessons.map(() => 0);
+            nums.forEach(n => {
+                let rowCount = 0;
+                html += `<tr><td>${esc(n)}번</td>`;
+                lessons.forEach((l, i) => {
+                    const ok = doneSet.has(`${n}-${l}`);
+                    if (ok) { rowCount++; colCount[i]++; }
+                    html += `<td class="${ok ? 'done' : 'miss'}">${ok ? '✓' : ''}</td>`;
+                });
+                html += `<td>${rowCount} / ${lessons.length}</td></tr>`;
+            });
+            html += '<tr class="sum"><td>제출 수</td>';
+            colCount.forEach(c => html += `<td>${c} / ${nums.length}</td>`);
+            html += '<td></td></tr></tbody></table></div></div>';
+            area.innerHTML = html;
+            return;
+        }
+
+        area.innerHTML = '<div class="status-box">단원이나 차시를 고르면 번호별 제출 현황이 표시됩니다.</div>';
     }
 
     function renderQuestionTable() {
         const tbody = document.getElementById('teacher-tbody');
-        const schoolF = document.getElementById('teacherSchoolFilter').value;
-        const classF = document.getElementById('teacherClassFilter').value;
-        
-        let filteredData = allLatestQuestions;
-        if(schoolF !== 'all') filteredData = filteredData.filter(q => q.schoolCode === schoolF);
-        if(classF !== 'all') filteredData = filteredData.filter(q => q.classNum === parseInt(classF));
+        const data = [...classQuestions].sort((a, b) =>
+            (a.unit - b.unit) || (a.lesson - b.lesson) || (a.studentNum - b.studentNum));
 
-        filteredData.sort((a, b) => {
-            if(a.schoolCode !== b.schoolCode) return String(a.schoolCode).localeCompare(String(b.schoolCode));
-            if(a.grade !== b.grade) return a.grade - b.grade;
-            if(a.classNum !== b.classNum) return a.classNum - b.classNum;
-            if(a.studentNum !== b.studentNum) return a.studentNum - b.studentNum;
-            if(a.unit !== b.unit) return a.unit - b.unit;
-            return a.lesson - b.lesson;
-        });
-
-        tbody.innerHTML = '';
-        if(filteredData.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8">등록된 질문 기록이 없습니다.</td></tr>';
+        if (data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8">아직 올라온 질문이 없습니다.</td></tr>';
             return;
         }
 
         let rows = '';
-        filteredData.forEach(d => {
+        data.forEach(d => {
             const dateStr = d.createdAt ? d.createdAt.toDate().toLocaleString() : "방금 전";
             rows += `<tr>
                 <td>${esc(d.schoolCode)}</td><td>${esc(d.grade)}-${esc(d.classNum)}</td><td>${esc(d.studentNum)}</td>
                 <td>${esc(d.unit)}단원</td><td>${esc(d.lesson)}차시</td>
-                <td>${esc(d.observation)}</td><td>${esc(d.question)}</td><td>${esc(dateStr)}</td>
+                <td class="q-cell">${esc(d.observation)}</td><td class="q-cell">${esc(d.question)}</td><td>${esc(dateStr)}</td>
             </tr>`;
         });
         tbody.innerHTML = rows;
     }
 
-    // 교사 화면용 전체 명단 읽기 (교사 화면을 열 때, 또는 새로고침 버튼)
+    // --- 공유 화면 ---
+    function openShare() {
+        if (!getTeacherFilter()) { alert("먼저 학교와 학급을 선택하세요."); return; }
+        document.getElementById('share-view').style.display = 'block';
+        renderShare();
+    }
+    function closeShare() {
+        document.getElementById('share-view').style.display = 'none';
+    }
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeShare(); });
+
+    function renderShare() {
+        const view = document.getElementById('share-view');
+        if (view.style.display !== 'block') return;
+        const f = getTeacherFilter();
+        const grid = document.getElementById('shareGrid');
+        if (!f) { grid.innerHTML = ''; return; }
+
+        let title = `${f.grade}학년 ${f.classNum}반`;
+        if (f.unit !== null && f.lesson !== null) title += ` · ${f.unit}단원 ${f.lesson}차시 ${LESSON_DATA[f.unit][f.lesson]}`;
+        else if (f.unit !== null) title += ` · ${f.unit}단원`;
+        document.getElementById('shareTitle').textContent = title + ' 우리의 질문';
+
+        const showNum = document.getElementById('shareShowNum').checked;
+        const showObs = document.getElementById('shareShowObs').checked;
+        const showLesson = f.lesson === null;
+
+        // 번호를 숨겼을 때 순서로 누구인지 짐작하지 않도록 올린 시간 순으로 나열
+        const data = [...classQuestions].sort((a, b) => {
+            const ta = a.createdAt ? a.createdAt.toMillis() : Date.now();
+            const tb = b.createdAt ? b.createdAt.toMillis() : Date.now();
+            return ta - tb;
+        });
+
+        document.getElementById('shareCount').textContent = `${data.length}개`;
+        if (data.length === 0) {
+            grid.innerHTML = '<div class="share-empty">아직 올라온 질문이 없습니다.</div>';
+            return;
+        }
+
+        let html = '';
+        data.forEach(d => {
+            const tags = [];
+            if (showLesson) tags.push(`${esc(d.unit)}단원 ${esc(d.lesson)}차시`);
+            if (showNum) tags.push(`${esc(d.studentNum)}번`);
+            html += `<div class="share-card">
+                ${tags.length ? `<div class="tag">${tags.join(' · ')}</div>` : ''}
+                <div>${esc(d.question)}</div>
+                ${showObs ? `<div class="obs">${esc(d.observation)}</div>` : ''}
+            </div>`;
+        });
+        grid.innerHTML = html;
+    }
+
+    // --- 명단 관리 ---
+    // 교사 화면용 전체 명단 읽기 (명단 관리 탭을 처음 열 때, 또는 새로고침 버튼)
     async function reloadStudents() {
         const tbody = document.getElementById('students-tbody');
         tbody.innerHTML = '<tr><td colspan="6">명단 불러오는 중...</td></tr>';
@@ -635,6 +857,7 @@
                 if (!data.pin) data.pin = "0000";
                 allStudents.push(data);
             });
+            studentsLoaded = true;
             loadRegisteredStudents();
         } catch (e) {
             tbody.innerHTML = '<tr><td colspan="6">에러: ' + esc(e.message) + '</td></tr>';
@@ -647,6 +870,7 @@
         await reloadStudents();
         await syncRosterFromAllStudents();
         populateSchoolDropdown();
+        populateTeacherSchool();
         alert(`명단 요약을 다시 만들었습니다. (${roster.length}명)`);
     }
 
@@ -734,6 +958,7 @@
             
             loadRegisteredStudents();
             populateSchoolDropdown();
+            populateTeacherSchool();
         } catch(error) {
             alert("등록 실패! 에러: " + error.message);
         }
@@ -807,6 +1032,7 @@
                 fileInput.value = "";
                 loadRegisteredStudents();
                 populateSchoolDropdown();
+                populateTeacherSchool();
             } catch (error) {
                 alert("엑셀 업로드 실패! 에러: " + error.message);
             }
@@ -844,8 +1070,8 @@
         tbody.innerHTML = rows;
     }
 
-    async function downloadExcel() {
-        const snapshot = await db.collection("questions").get();
+    // --- 엑셀 ---
+    function writeQuestionsExcel(snapshot, fileName, sheetName) {
         let data = [];
         snapshot.forEach(doc => {
             const d = doc.data();
@@ -854,7 +1080,8 @@
                 "단원": d.unit, "차시": d.lesson, "주제": d.topic,
                 "관찰내용": d.observation, "질문": d.question,
                 "최신여부": d.isLatest ? "O" : "X(수정됨)",
-                "기록일시": d.createdAt ? d.createdAt.toDate().toLocaleString() : ""
+                "기록일시": d.createdAt ? d.createdAt.toDate().toLocaleString() : "",
+                _t: d.createdAt ? d.createdAt.toMillis() : 0
             });
         });
         
@@ -865,13 +1092,48 @@
             if(a.번호 !== b.번호) return a.번호 - b.번호;
             if(a.단원 !== b.단원) return a.단원 - b.단원;
             if(a.차시 !== b.차시) return a.차시 - b.차시;
-            return new Date(a.기록일시) - new Date(b.기록일시);
+            return a._t - b._t;
         });
+        data.forEach(r => delete r._t);
+
+        if (data.length === 0) { alert("내려받을 기록이 없습니다."); return; }
 
         const ws = XLSX.utils.json_to_sheet(data);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "전체_질문기록");
-        XLSX.writeFile(wb, `학생_질문기록_전체.xlsx`);
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+        XLSX.writeFile(wb, fileName);
+    }
+
+    // [추가] 지금 고른 학급(·단원·차시)의 기록만, 수정 이력까지 포함해 내려받기
+    async function downloadClassExcel() {
+        const f = getTeacherFilter();
+        if (!f) { alert("먼저 학교와 학급을 선택하세요."); return; }
+        try {
+            let q = db.collection("questions")
+                .where("schoolCode", "==", f.school)
+                .where("grade", "==", f.grade)
+                .where("classNum", "==", f.classNum);
+            if (f.unit !== null) q = q.where("unit", "==", f.unit);
+            if (f.lesson !== null) q = q.where("lesson", "==", f.lesson);
+            const snapshot = await q.get();
+            let name = `질문기록_${f.school}_${f.grade}-${f.classNum}`;
+            if (f.unit !== null) name += `_${f.unit}단원`;
+            if (f.lesson !== null) name += `_${f.lesson}차시`;
+            writeQuestionsExcel(snapshot, `${name}.xlsx`, "학급_질문기록");
+        } catch (e) {
+            alert("엑셀 만들기 실패: " + e.message);
+        }
+    }
+
+    // 전체 기록(모든 학교·수정 이력 포함) — 읽기 사용량이 크므로 확인 후 진행
+    async function downloadExcel() {
+        if (!confirm("모든 학교의 전체 기록(수정 이력 포함)을 읽어 엑셀로 만듭니다.\n읽기 사용량이 크니 꼭 필요할 때만 사용하세요.\n진행할까요?")) return;
+        try {
+            const snapshot = await db.collection("questions").get();
+            writeQuestionsExcel(snapshot, `학생_질문기록_전체.xlsx`, "전체_질문기록");
+        } catch (e) {
+            alert("엑셀 만들기 실패: " + e.message);
+        }
     }
 </script>
 </body>
