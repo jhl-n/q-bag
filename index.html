@@ -66,6 +66,13 @@
         #staff-table input[type=checkbox] { width: 18px; height: 18px; }
         #staff-table tr.off td { background: #f4f6f6; color: #95a5a6; }
 
+        .request-box { margin-top: 14px; padding: 14px; background: #f8f9f9; border: 1px solid #d5dbdb; border-radius: 8px; text-align: left; }
+        .request-box input { margin: 6px 0; }
+        .request-box button { margin: 8px 0 0 0; }
+        .req-badge { display: inline-block; min-width: 18px; padding: 1px 6px; margin-left: 4px; border-radius: 10px; background: #fff; color: #c0392b; font-size: 12px; font-weight: bold; }
+        #req-table input, #req-table select { margin: 0; padding: 6px 8px; }
+        #req-table button { width: auto; margin: 0 2px; }
+
         /* ── 단원·차시 관리 ── */
         .lesson-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0; }
         .lesson-bar select, .lesson-bar input[type=text] { width: auto; margin: 0; }
@@ -158,6 +165,17 @@
     <p style="color:#7f8c8d; font-size:14px;">권한을 받은 Google 계정으로만 들어올 수 있습니다.</p>
     <button id="btn-google" onclick="googleSignIn()" style="background:#4285f4;">Google 계정으로 로그인</button>
     <div id="loginMsg" style="margin-top:12px; font-size:15px; line-height:1.6;"></div>
+    <div id="requestBox" class="request-box" style="display:none;">
+        <div id="requestForm">
+            <p style="margin:0 0 6px 0; font-weight:bold;">운영자에게 권한 요청하기</p>
+            <input type="text" id="reqName" placeholder="이름 (예: 김한산)" maxlength="30">
+            <input type="text" id="reqSchool" placeholder="학교 (예: 한산초)" maxlength="30" list="reqSchoolList">
+            <datalist id="reqSchoolList"></datalist>
+            <input type="text" id="reqMemo" placeholder="하고 싶은 말 (선택, 예: 6학년 1반 담임)" maxlength="100">
+            <button onclick="sendAccessRequest()" style="background:#27ae60;">권한 요청 보내기</button>
+        </div>
+        <div id="requestDone" style="display:none;"></div>
+    </div>
     <button id="btn-switch" onclick="switchAccount()" style="display:none; background:#7f8c8d;">다른 계정으로 로그인</button>
     <p><a style="font-size:13px; color:#95a5a6; cursor:pointer; text-decoration:underline;" onclick="goStudentView()">학생 화면으로</a></p>
 </div>
@@ -179,7 +197,7 @@
         <button class="btn-teacher" style="background:#8e44ad;" onclick="showSection('qna')">📝 학생 질문 확인</button>
         <button class="btn-teacher" style="background:#d35400;" onclick="showSection('register')" data-roles="admin teacher">👥 학생 명단 등록 관리</button>
         <button class="btn-teacher" style="background:#2c3e50;" onclick="showSection('lessons')" data-roles="admin">📚 단원·차시 관리</button>
-        <button class="btn-teacher" style="background:#c0392b;" onclick="showSection('staff')" data-roles="admin">🔑 교사 권한 관리</button>
+        <button class="btn-teacher" style="background:#c0392b;" onclick="showSection('staff')" data-roles="admin">🔑 교사 권한 관리<span id="reqCount"></span></button>
     </div>
 
     <!-- 1. 질문 확인 섹션 : 학급을 먼저 고르면 그 범위만 읽고, 이후 새 질문은 실시간 반영 -->
@@ -215,6 +233,14 @@
 
     <!-- 4. 교사 권한 관리 섹션 (운영자만) : teachers/{이메일} 문서 -->
     <div id="section-staff" style="display:none;">
+        <div class="reg-box" id="reqBox" style="display:none; border-color:#e67e22; background:#fef5e7;">
+            <h3 style="margin-top:0;">📨 대기 중인 권한 요청 <span id="reqTitleCount"></span></h3>
+            <span class="info-text">역할과 학교를 확인하고 승인하세요. 학교 이름은 학생 명단과 똑같아야 합니다. 연구자·운영자는 학교가 필요 없습니다.</span>
+            <table id="req-table" style="margin-top:6px;">
+                <thead><tr><th>이메일</th><th>이름</th><th>메모</th><th>요청일</th><th>역할</th><th>학교</th><th>처리</th></tr></thead>
+                <tbody id="req-tbody"></tbody>
+            </table>
+        </div>
         <div class="reg-box">
             <h3>교사 권한 관리</h3>
             <span class="info-text">
@@ -847,6 +873,7 @@
 
     function setLoginMsg(html, showSwitch) {
         document.getElementById('loginMsg').innerHTML = html;
+        document.getElementById('requestBox').style.display = 'none';
         document.getElementById('btn-switch').style.display = showSwitch ? 'block' : 'none';
         document.getElementById('btn-google').style.display = showSwitch ? 'none' : 'block';
     }
@@ -888,7 +915,8 @@
             const doc = await db.collection('teachers').doc(email).get();
             const d = doc.exists ? doc.data() : null;
             if (!d || d.active === false || !ROLE_NAMES[d.role]) {
-                setLoginMsg(`<strong>${esc(email)}</strong> 계정은 교사 권한이 없습니다.<br>운영자에게 이 이메일을 알려 권한을 요청하세요.`, true);
+                setLoginMsg(`<strong>${esc(email)}</strong> 계정은 아직 교사 권한이 없습니다.`, true);
+                showRequestBox(email, d);
                 return;
             }
             teacherInfo = { email, name: d.name || '', role: d.role, school: d.school || '' };
@@ -896,6 +924,66 @@
             openTeacherView();
         } catch (e) {
             setLoginMsg('권한 확인 실패: ' + esc(e.message), true);
+        }
+    }
+
+    // ── 권한 요청: accessRequests/{이메일} 문서 하나 (본인 이메일로만 보낼 수 있음) ──
+    async function showRequestBox(email, staffDoc) {
+        const box = document.getElementById('requestBox');
+        box.style.display = 'block';
+        document.getElementById('reqSchoolList').innerHTML =
+            Array.from(new Set(roster.map(s => s.schoolCode))).map(s => `<option value="${esc(s)}">`).join('');
+        if (staffDoc && staffDoc.active === false) {
+            showRequestDone('이 계정은 운영자가 사용을 중지했습니다. 다시 쓰려면 운영자에게 직접 문의하세요.', false);
+            return;
+        }
+        try {
+            const doc = await db.collection('accessRequests').doc(email).get();
+            if (doc.exists) {
+                const r = doc.data();
+                const when = r.createdAt ? r.createdAt.toDate().toLocaleString() : '';
+                showRequestDone(`권한 요청을 보냈습니다 (${esc(when)}).<br>운영자가 승인하면 이 화면을 <strong>새로고침</strong>해 주세요.`, true, r);
+                return;
+            }
+        } catch (e) { /* 요청 기록을 못 읽어도 요청 양식은 보여 줌 */ }
+        document.getElementById('requestForm').style.display = 'block';
+        document.getElementById('requestDone').style.display = 'none';
+    }
+
+    function showRequestDone(html, canResend, r) {
+        document.getElementById('requestForm').style.display = 'none';
+        const done = document.getElementById('requestDone');
+        done.style.display = 'block';
+        done.innerHTML = html + (canResend ? '<br><a style="font-size:13px; color:#2980b9; cursor:pointer; text-decoration:underline;" onclick="editAccessRequest()">요청 내용 고치기</a>' : '');
+        if (r) {
+            document.getElementById('reqName').value = r.name || '';
+            document.getElementById('reqSchool').value = r.school || '';
+            document.getElementById('reqMemo').value = r.memo || '';
+        }
+    }
+
+    function editAccessRequest() {
+        document.getElementById('requestForm').style.display = 'block';
+        document.getElementById('requestDone').style.display = 'none';
+    }
+
+    async function sendAccessRequest() {
+        const user = auth.currentUser;
+        if (!user) { alert("먼저 Google 계정으로 로그인하세요."); return; }
+        const email = String(user.email || '').toLowerCase();
+        const name = document.getElementById('reqName').value.trim();
+        const school = document.getElementById('reqSchool').value.trim();
+        const memo = document.getElementById('reqMemo').value.trim();
+        if (!name) { alert("이름을 입력하세요."); return; }
+        if (!school) { alert("학교를 입력하세요. (연구자는 소속 기관)"); return; }
+        try {
+            await db.collection('accessRequests').doc(email).set({
+                name, school, memo,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            showRequestDone(`권한 요청을 보냈습니다.<br>운영자가 승인하면 이 화면을 <strong>새로고침</strong>해 주세요.`, true);
+        } catch (e) {
+            alert("요청 보내기 실패: " + e.message);
         }
     }
 
@@ -945,6 +1033,7 @@
         applyRoleUI();
         populateTeacherSchool();
         showSection('qna');
+        loadRequests();
     }
 
     // [변경] 명단 관리 탭은 처음 열 때만 전체 명단을 읽음
@@ -1237,7 +1326,80 @@
     let staffList = [];
     const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+    // ── 대기 중인 권한 요청 ──
+    let requestList = [];
+
+    function setRequestCount(n) {
+        document.getElementById('reqCount').innerHTML = n ? `<span class="req-badge">${n}</span>` : '';
+        document.getElementById('reqTitleCount').textContent = n ? `(${n}건)` : '';
+        document.getElementById('reqBox').style.display = n ? 'block' : 'none';
+    }
+
+    async function loadRequests() {
+        if (!isAdmin()) return;
+        try {
+            const snap = await db.collection('accessRequests').get();
+            requestList = snap.docs.map(d => Object.assign({ email: d.id }, d.data()))
+                .sort((a, b) => (a.createdAt ? a.createdAt.toMillis() : 0) - (b.createdAt ? b.createdAt.toMillis() : 0));
+        } catch (e) {
+            requestList = [];
+            console.warn('권한 요청을 불러오지 못했습니다:', e.message);
+        }
+        setRequestCount(requestList.length);
+        renderRequests();
+    }
+
+    function renderRequests() {
+        const tbody = document.getElementById('req-tbody');
+        tbody.innerHTML = requestList.map((r, i) => `
+            <tr>
+                <td style="text-align:left;">${esc(r.email)}</td>
+                <td>${esc(r.name)}</td>
+                <td class="q-cell">${esc(r.memo)}</td>
+                <td>${r.createdAt ? esc(r.createdAt.toDate().toLocaleDateString()) : ''}</td>
+                <td><select data-r="${i}" data-f="role" onchange="this.closest('tr').querySelector('[data-f=school]').disabled = this.value !== 'teacher'">${roleOptions()}</select></td>
+                <td><input type="text" maxlength="30" data-r="${i}" data-f="school"></td>
+                <td style="white-space:nowrap;">
+                    <button class="btn-reset" style="background:#27ae60;" onclick="approveRequest(${i})">승인</button>
+                    <button class="btn-reset" style="background:#7f8c8d;" onclick="rejectRequest(${i})">거절</button>
+                </td>
+            </tr>`).join('');
+        tbody.querySelectorAll('[data-f=role]').forEach(el => { el.value = 'teacher'; });
+        tbody.querySelectorAll('[data-f=school]').forEach(el => { el.value = requestList[Number(el.dataset.r)].school || ''; });
+    }
+
+    async function approveRequest(i) {
+        const r = requestList[i];
+        const role = document.querySelector(`#req-tbody [data-r="${i}"][data-f="role"]`).value;
+        const school = document.querySelector(`#req-tbody [data-r="${i}"][data-f="school"]`).value.trim();
+        if (role === 'teacher' && !school) { alert("학교 교사는 학교 이름이 필요합니다."); return; }
+        if (role === 'teacher' && !confirmSchoolName(school)) return;
+        if (role === 'admin' && !confirm(`${r.email} 에게 운영자 권한(권한 관리·차시 관리 포함)을 줄까요?`)) return;
+        try {
+            const batch = db.batch();
+            batch.set(db.collection('teachers').doc(r.email), staffPayload(r.name || '', role, school, true));
+            batch.delete(db.collection('accessRequests').doc(r.email));
+            await batch.commit();
+            alert(`${r.email} 에게 ${ROLE_NAMES[role]} 권한을 주었습니다.\n그 선생님은 로그인 화면을 새로고침하면 들어올 수 있습니다.`);
+            loadStaff();
+        } catch (e) {
+            alert("승인 실패: " + e.message);
+        }
+    }
+
+    async function rejectRequest(i) {
+        const r = requestList[i];
+        if (!confirm(`${r.email} (${r.name}) 의 권한 요청을 거절하고 지울까요?`)) return;
+        try {
+            await db.collection('accessRequests').doc(r.email).delete();
+            loadRequests();
+        } catch (e) {
+            alert("거절 처리 실패: " + e.message);
+        }
+    }
+
     async function loadStaff() {
+        loadRequests();
         const tbody = document.getElementById('staff-tbody');
         tbody.innerHTML = '<tr><td colspan="6">불러오는 중...</td></tr>';
         try {
@@ -1251,7 +1413,8 @@
     }
 
     function roleOptions() {
-        return Object.entries(ROLE_NAMES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+        // 학교 교사를 맨 위(기본값)로: 실수로 운영자 권한이 나가지 않게
+        return ['teacher', 'researcher', 'admin'].map(k => `<option value="${k}">${ROLE_NAMES[k]}</option>`).join('');
     }
 
     function renderStaff() {
