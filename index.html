@@ -7,6 +7,7 @@
     <!-- Firebase V8 호환 SDK -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <!-- 엑셀 다운로드 라이브러리 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
@@ -54,6 +55,16 @@
         .row-hide-btn { width: auto; margin: 0; padding: 4px 10px; font-size: 12px; background: #95a5a6; white-space: nowrap; }
         .row-hide-btn:hover { background: #e74c3c; }
         tr.row-hidden .row-hide-btn { background: #2980b9; }
+
+        /* ── 교사 로그인·권한 ── */
+        .teacher-link { text-align: right; margin-top: 24px; }
+        .teacher-link a { font-size: 13px; color: #95a5a6; cursor: pointer; text-decoration: underline; }
+        .who { font-size: 14px; color: #2c3e50; margin-right: 6px; }
+        .role-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; color: #fff; background: #7f8c8d; margin-left: 4px; }
+        .role-admin { background: #c0392b; } .role-researcher { background: #8e44ad; } .role-teacher { background: #2980b9; }
+        #staff-table input, #staff-table select { margin: 0; padding: 6px 8px; }
+        #staff-table input[type=checkbox] { width: 18px; height: 18px; }
+        #staff-table tr.off td { background: #f4f6f6; color: #95a5a6; }
 
         /* ── 단원·차시 관리 ── */
         .lesson-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0; }
@@ -137,6 +148,18 @@
         <h3>나의 이전 차시 질문들</h3>
         <div id="history-list"></div>
     </div>
+
+    <div class="teacher-link"><a onclick="teacherLogin()">선생님 로그인</a></div>
+</div>
+
+<!-- 교사 로그인 뷰 : 교사 전용 링크(?teacher) 또는 '선생님 로그인'으로 열림 -->
+<div class="container" id="login-view" style="display:none; max-width: 480px; text-align:center;">
+    <h2>👨‍🏫 교사 로그인</h2>
+    <p style="color:#7f8c8d; font-size:14px;">권한을 받은 Google 계정으로만 들어올 수 있습니다.</p>
+    <button id="btn-google" onclick="googleSignIn()" style="background:#4285f4;">Google 계정으로 로그인</button>
+    <div id="loginMsg" style="margin-top:12px; font-size:15px; line-height:1.6;"></div>
+    <button id="btn-switch" onclick="switchAccount()" style="display:none; background:#7f8c8d;">다른 계정으로 로그인</button>
+    <p><a style="font-size:13px; color:#95a5a6; cursor:pointer; text-decoration:underline;" onclick="goStudentView()">학생 화면으로</a></p>
 </div>
 
 <!-- 교사 대시보드 뷰 -->
@@ -144,16 +167,19 @@
     <div class="dashboard-header">
         <h2>👨‍🏫 교사 대시보드</h2>
         <div>
+            <span id="whoami" class="who"></span>
             <button class="btn-teacher" onclick="downloadClassExcel()">📥 선택 학급 엑셀</button>
-            <button class="btn-teacher" style="background:#34495e;" onclick="downloadExcel()">📥 전체 엑셀</button>
-            <button style="background:#7f8c8d; width:auto; display:inline-block;" onclick="location.reload()">🏠 학생 화면으로</button>
+            <button class="btn-teacher" style="background:#34495e;" onclick="downloadExcel()" data-roles="admin researcher">📥 전체 엑셀</button>
+            <button style="background:#7f8c8d; width:auto; display:inline-block;" onclick="goStudentView()">🏠 학생 화면으로</button>
+            <button style="background:#95a5a6; width:auto; display:inline-block;" onclick="teacherLogout()">로그아웃</button>
         </div>
     </div>
     
     <div style="margin-top: 15px;">
         <button class="btn-teacher" style="background:#8e44ad;" onclick="showSection('qna')">📝 학생 질문 확인</button>
-        <button class="btn-teacher" style="background:#d35400;" onclick="showSection('register')">👥 학생 명단 등록 관리</button>
-        <button class="btn-teacher" style="background:#2c3e50;" onclick="showSection('lessons')">📚 단원·차시 관리</button>
+        <button class="btn-teacher" style="background:#d35400;" onclick="showSection('register')" data-roles="admin teacher">👥 학생 명단 등록 관리</button>
+        <button class="btn-teacher" style="background:#2c3e50;" onclick="showSection('lessons')" data-roles="admin">📚 단원·차시 관리</button>
+        <button class="btn-teacher" style="background:#c0392b;" onclick="showSection('staff')" data-roles="admin">🔑 교사 권한 관리</button>
     </div>
 
     <!-- 1. 질문 확인 섹션 : 학급을 먼저 고르면 그 범위만 읽고, 이후 새 질문은 실시간 반영 -->
@@ -184,6 +210,34 @@
             <tbody id="teacher-tbody">
                 <tr><td colspan="9">학교와 학급을 먼저 선택하세요.</td></tr>
             </tbody>
+        </table>
+    </div>
+
+    <!-- 4. 교사 권한 관리 섹션 (운영자만) : teachers/{이메일} 문서 -->
+    <div id="section-staff" style="display:none;">
+        <div class="reg-box">
+            <h3>교사 권한 관리</h3>
+            <span class="info-text">
+                ※ 여기에 등록된 Google 이메일만 교사 대시보드에 들어올 수 있습니다.<br>
+                ※ <strong>운영자</strong>: 모든 기능(권한 관리, 단원·차시 관리 포함) · <strong>연구자</strong>: 전체 학교 질문 보기·엑셀 (수정 불가) · <strong>학교 교사</strong>: 자기 학교 질문 보기, 자기 학교 학생 명단 관리<br>
+                ※ '사용'을 끄면 그 계정은 바로 대시보드에 들어오지 못합니다.
+            </span>
+            <div class="row-group">
+                <input type="email" id="staffEmail" placeholder="Google 이메일 (예: teacher@gmail.com)">
+                <input type="text" id="staffName" placeholder="이름" maxlength="30">
+                <select id="staffRole" onchange="document.getElementById('staffSchool').disabled = this.value !== 'teacher'">
+                    <option value="teacher">학교 교사</option>
+                    <option value="researcher">연구자</option>
+                    <option value="admin">운영자</option>
+                </select>
+                <input type="text" id="staffSchool" placeholder="학교 (명단과 똑같이, 예: 한산초)" maxlength="30">
+                <button onclick="addStaff()" style="background:#c0392b; flex:0.4;">권한 부여</button>
+            </div>
+        </div>
+        <h3 style="margin-top: 20px;">권한이 있는 계정 <button class="btn-refresh" onclick="loadStaff()">🔄 새로고침</button></h3>
+        <table id="staff-table">
+            <thead><tr><th>이메일</th><th>이름</th><th>역할</th><th>학교</th><th>사용</th><th>저장</th></tr></thead>
+            <tbody id="staff-tbody"></tbody>
         </table>
     </div>
 
@@ -461,6 +515,7 @@
     // 처음 열 때 명단 요약 문서 1개 + 단원·차시 문서 1개만 읽음
     async function initApp() {
         loadLessons();
+        if (wantsTeacher) teacherLogin();
         try {
             const doc = await ROSTER_REF.get();
             if (doc.exists && Array.isArray(doc.data().list)) {
@@ -772,16 +827,124 @@
     // ═══════════════════════════════════════════════
     let timer;
     function startTimer() { 
-        timer = setTimeout(openTeacherView, 3000); 
+        timer = setTimeout(teacherLogin, 3000); 
     }
     function clearTimer() { clearTimeout(timer); }
+
+    // ───────────────────────────────────────────────
+    // 교사 로그인 (Google) + 이메일 허용 목록
+    //  - teachers/{이메일} 문서가 있고 active 가 false 가 아닌 계정만 대시보드 입장
+    //  - role: 'admin'(운영자) | 'researcher'(연구자) | 'teacher'(학교 교사, school 필수)
+    //  - 실제 보호는 Firestore 보안 규칙이 담당 (화면 숨김은 편의용)
+    // ───────────────────────────────────────────────
+    const auth = firebase.auth();
+    let teacherInfo = null;
+    const ROLE_NAMES = { admin: '운영자', researcher: '연구자', teacher: '학교 교사' };
+    const wantsTeacher = new URLSearchParams(location.search).has('teacher');
+
+    function mySchoolOnly() { return !!teacherInfo && teacherInfo.role === 'teacher'; }
+    function isAdmin() { return !!teacherInfo && teacherInfo.role === 'admin'; }
+
+    function setLoginMsg(html, showSwitch) {
+        document.getElementById('loginMsg').innerHTML = html;
+        document.getElementById('btn-switch').style.display = showSwitch ? 'block' : 'none';
+        document.getElementById('btn-google').style.display = showSwitch ? 'none' : 'block';
+    }
+
+    // 제목 3초 누르기, '선생님 로그인' 링크, 교사 전용 링크(?teacher) 모두 여기로
+    function teacherLogin() {
+        if (teacherInfo) { openTeacherView(); return; }
+        document.getElementById('student-view').style.display = 'none';
+        document.getElementById('teacher-view').style.display = 'none';
+        document.getElementById('login-view').style.display = 'block';
+        setLoginMsg('', false);
+        if (auth.currentUser) checkTeacher(auth.currentUser);
+    }
+
+    async function googleSignIn() {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: 'select_account' });
+        try {
+            const r = await auth.signInWithPopup(provider);
+            await checkTeacher(r.user);
+        } catch (e) {
+            if (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment') {
+                await auth.signInWithRedirect(provider);   // 팝업이 막힌 기기에서는 페이지 이동 방식으로
+                return;
+            }
+            if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') return;
+            if (e.code === 'auth/unauthorized-domain') {
+                setLoginMsg('이 주소가 Firebase 로그인 허용 도메인에 등록되어 있지 않습니다.<br>(Firebase 콘솔 → Authentication → 설정 → 승인된 도메인)', false);
+                return;
+            }
+            setLoginMsg('로그인 실패: ' + esc(e.message), false);
+        }
+    }
+
+    async function checkTeacher(user) {
+        const email = String(user.email || '').toLowerCase();
+        setLoginMsg(`${esc(email)} 권한 확인 중...`, false);
+        try {
+            const doc = await db.collection('teachers').doc(email).get();
+            const d = doc.exists ? doc.data() : null;
+            if (!d || d.active === false || !ROLE_NAMES[d.role]) {
+                setLoginMsg(`<strong>${esc(email)}</strong> 계정은 교사 권한이 없습니다.<br>운영자에게 이 이메일을 알려 권한을 요청하세요.`, true);
+                return;
+            }
+            teacherInfo = { email, name: d.name || '', role: d.role, school: d.school || '' };
+            document.getElementById('login-view').style.display = 'none';
+            openTeacherView();
+        } catch (e) {
+            setLoginMsg('권한 확인 실패: ' + esc(e.message), true);
+        }
+    }
+
+    async function switchAccount() {
+        await auth.signOut();
+        teacherInfo = null;
+        setLoginMsg('', false);
+        googleSignIn();
+    }
+
+    async function teacherLogout() {
+        if (questionUnsub) { questionUnsub(); questionUnsub = null; }
+        await auth.signOut();
+        teacherInfo = null;
+        location.href = location.pathname;
+    }
+
+    function goStudentView() {
+        location.href = location.pathname;
+    }
+
+    // 교사 전용 링크로 들어왔으면 로그인 화면부터. 이미 로그인해 둔 기기면 바로 확인
+    // (팝업 대신 페이지 이동 방식으로 로그인하고 돌아온 경우도 여기서 처리됨)
+    auth.onAuthStateChanged(user => {
+        const loginShown = document.getElementById('login-view').style.display === 'block';
+        if (user && !teacherInfo && (wantsTeacher || loginShown)) checkTeacher(user);
+    });
+
+    // 역할에 맞게 탭·버튼 보이기
+    function applyRoleUI() {
+        document.querySelectorAll('#teacher-view [data-roles]').forEach(el => {
+            el.style.display = el.dataset.roles.split(' ').includes(teacherInfo.role) ? '' : 'none';
+        });
+        const who = teacherInfo.name || teacherInfo.email;
+        document.getElementById('whoami').innerHTML =
+            `${esc(who)}<span class="role-badge role-${teacherInfo.role}">${ROLE_NAMES[teacherInfo.role]}${mySchoolOnly() ? ' · ' + esc(teacherInfo.school) : ''}</span>`;
+        const reg = document.getElementById('regSchool');
+        if (mySchoolOnly()) { reg.value = teacherInfo.school; reg.readOnly = true; }
+    }
 
     // [변경] 교사 화면을 열 때 아무것도 미리 읽지 않음.
     //        학교·학급 선택 목록은 이미 읽어 둔 명단 요약(roster)으로 채움.
     function openTeacherView() {
+        if (!teacherInfo) { teacherLogin(); return; }
         document.getElementById('student-view').style.display = 'none';
         document.getElementById('teacher-view').style.display = 'block';
+        applyRoleUI();
         populateTeacherSchool();
+        showSection('qna');
     }
 
     // [변경] 명단 관리 탭은 처음 열 때만 전체 명단을 읽음
@@ -789,6 +952,8 @@
         document.getElementById('section-qna').style.display = sectionId === 'qna' ? 'block' : 'none';
         document.getElementById('section-register').style.display = sectionId === 'register' ? 'block' : 'none';
         document.getElementById('section-lessons').style.display = sectionId === 'lessons' ? 'block' : 'none';
+        document.getElementById('section-staff').style.display = sectionId === 'staff' ? 'block' : 'none';
+        if (sectionId === 'staff') loadStaff();
         if (sectionId === 'register' && !studentsLoaded) {
             reloadStudents();
         }
@@ -801,10 +966,12 @@
     function populateTeacherSchool() {
         const sel = document.getElementById('tSchool');
         const prev = sel.value;
-        const schools = Array.from(new Set(roster.map(s => s.schoolCode)));
+        const schools = Array.from(new Set(roster.map(s => s.schoolCode)))
+            .filter(s => !mySchoolOnly() || s === teacherInfo.school);
         sel.innerHTML = '<option value="">학교 선택</option>';
         schools.forEach(s => sel.innerHTML += `<option value="${esc(s)}">${esc(s)}</option>`);
         if (prev && schools.includes(prev)) sel.value = prev;
+        else if (schools.length === 1) { sel.value = schools[0]; onTeacherSchoolChange(); }
     }
 
     function onTeacherSchoolChange() {
@@ -1064,6 +1231,106 @@
         shareHidden.clear();
         renderQuestionTable();
         renderShare();
+    }
+
+    // --- 교사 권한 관리 (운영자만) ---
+    let staffList = [];
+    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    async function loadStaff() {
+        const tbody = document.getElementById('staff-tbody');
+        tbody.innerHTML = '<tr><td colspan="6">불러오는 중...</td></tr>';
+        try {
+            const snap = await db.collection('teachers').get();
+            staffList = snap.docs.map(d => Object.assign({ email: d.id }, d.data()))
+                .sort((a, b) => (a.role || '').localeCompare(b.role || '') || a.email.localeCompare(b.email));
+            renderStaff();
+        } catch (e) {
+            tbody.innerHTML = '<tr><td colspan="6">에러: ' + esc(e.message) + '</td></tr>';
+        }
+    }
+
+    function roleOptions() {
+        return Object.entries(ROLE_NAMES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+    }
+
+    function renderStaff() {
+        const tbody = document.getElementById('staff-tbody');
+        if (staffList.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6">등록된 계정이 없습니다.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = staffList.map((t, i) => `
+            <tr class="${t.active === false ? 'off' : ''}">
+                <td style="text-align:left;">${esc(t.email)}${t.email === teacherInfo.email ? ' <span class="dup-note">(나)</span>' : ''}</td>
+                <td><input type="text" maxlength="30" data-i="${i}" data-f="name"></td>
+                <td><select data-i="${i}" data-f="role">${roleOptions()}</select></td>
+                <td><input type="text" maxlength="30" data-i="${i}" data-f="school" placeholder="학교 교사만"></td>
+                <td><input type="checkbox" data-i="${i}" data-f="active"></td>
+                <td><button class="btn-reset" style="background:#27ae60;" onclick="saveStaffRow(${i})">저장</button></td>
+            </tr>`).join('');
+        tbody.querySelectorAll('[data-f]').forEach(el => {
+            const t = staffList[Number(el.dataset.i)];
+            if (el.dataset.f === 'active') el.checked = t.active !== false;
+            else el.value = t[el.dataset.f] || '';
+        });
+    }
+
+    // 학교 이름이 학생 명단에 없는 이름이면(오타 등) 한 번 확인
+    function confirmSchoolName(school) {
+        const known = new Set(roster.map(s => s.schoolCode));
+        if (known.size === 0 || known.has(school)) return true;
+        return confirm(`'${school}' 은(는) 학생 명단에 없는 학교 이름입니다.\n명단의 학교 이름: ${Array.from(known).join(', ')}\n\n이름이 정확히 같아야 그 학교 학생이 보입니다. 그대로 저장할까요?`);
+    }
+
+    function staffPayload(name, role, school, active) {
+        return {
+            name: name.trim(),
+            role: role,
+            school: role === 'teacher' ? school.trim() : '',
+            active: !!active,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+    }
+
+    async function addStaff() {
+        const email = document.getElementById('staffEmail').value.trim().toLowerCase();
+        const name = document.getElementById('staffName').value;
+        const role = document.getElementById('staffRole').value;
+        const school = document.getElementById('staffSchool').value.trim();
+        if (!EMAIL_RE.test(email)) { alert("이메일 주소를 정확히 입력하세요."); return; }
+        if (staffList.some(t => t.email === email)) { alert("이미 등록된 이메일입니다. 아래 표에서 수정하세요."); return; }
+        if (role === 'teacher' && !school) { alert("학교 교사는 학교 이름이 필요합니다."); return; }
+        if (role === 'teacher' && !confirmSchoolName(school)) return;
+        if (role === 'admin' && !confirm(`${email} 에게 운영자 권한(권한 관리·차시 관리 포함)을 줄까요?`)) return;
+        try {
+            await db.collection('teachers').doc(email).set(staffPayload(name, role, school, true));
+            ['staffEmail', 'staffName', 'staffSchool'].forEach(id => document.getElementById(id).value = '');
+            alert(`${email} 에게 ${ROLE_NAMES[role]} 권한을 주었습니다.\n이제 그 계정으로 교사 링크에서 로그인할 수 있습니다.`);
+            loadStaff();
+        } catch (e) {
+            alert("권한 부여 실패: " + e.message);
+        }
+    }
+
+    async function saveStaffRow(i) {
+        const t = staffList[i];
+        const get = f => document.querySelector(`#staff-tbody [data-i="${i}"][data-f="${f}"]`);
+        const name = get('name').value, role = get('role').value, school = get('school').value.trim();
+        const active = get('active').checked;
+        if (t.email === teacherInfo.email && (role !== 'admin' || !active)) {
+            alert("내 계정의 운영자 권한은 여기서 해제할 수 없습니다.\n(다른 운영자가 해제하거나 Firebase 콘솔에서 바꾸세요.)");
+            return;
+        }
+        if (role === 'teacher' && !school) { alert("학교 교사는 학교 이름이 필요합니다."); return; }
+        if (role === 'teacher' && school !== (t.school || '') && !confirmSchoolName(school)) return;
+        try {
+            await db.collection('teachers').doc(t.email).set(staffPayload(name, role, school, active));
+            alert(`${t.email} 권한을 저장했습니다.`);
+            loadStaff();
+        } catch (e) {
+            alert("저장 실패: " + e.message);
+        }
     }
 
     // --- 단원·차시 관리 ---
@@ -1363,12 +1630,12 @@
             populateSchoolDropdown();
             alert("명단에서 삭제했습니다.");
         } catch (e) {
-            alert("삭제 실패: " + e.message + "\n(현재 보안 규칙에서는 명단 삭제가 막혀 있습니다. Firebase 콘솔에서 직접 삭제한 뒤 '명단 요약 다시 만들기'를 눌러 주세요.)");
+            alert("삭제 실패: " + e.message + "\n(교사 권한 계정으로 로그인했는지, 자기 학교 학생인지 확인하세요.)");
         }
     }
     
     async function registerStudent() {
-        const school = document.getElementById('regSchool').value.trim();
+        const school = mySchoolOnly() ? teacherInfo.school : document.getElementById('regSchool').value.trim();
         const grade = parseInt(document.getElementById('regGrade').value);
         const classNum = parseInt(document.getElementById('regClass').value);
         const studentNum = parseInt(document.getElementById('regNum').value);
@@ -1422,7 +1689,7 @@
             const worksheet = workbook.Sheets[workbook.SheetNames[0]];
             const jsonData = XLSX.utils.sheet_to_json(worksheet, {defval: ""});
 
-            let addedCount = 0; let duplicateCount = 0; let errorCount = 0;
+            let addedCount = 0; let duplicateCount = 0; let errorCount = 0; let otherSchoolCount = 0;
             let newStudentsArray = [];
             const batch = db.batch();
             let batchCount = 0;
@@ -1444,6 +1711,10 @@
 
                 if (!school || isNaN(grade) || isNaN(classNum) || isNaN(studentNum)) {
                     errorCount++; continue;
+                }
+                // 학교 교사는 자기 학교 학생만 등록 가능
+                if (mySchoolOnly() && school !== teacherInfo.school) {
+                    otherSchoolCount++; continue;
                 }
 
                 const isDuplicate = allStudents.concat(newStudentsArray).some(s => 
@@ -1472,7 +1743,7 @@
                     allStudents.push(...newStudentsArray); 
                     await syncRosterFromAllStudents();
                 }
-                alert(`엑셀 업로드 완료!\n\n- 신규 등록: ${addedCount}명\n- 중복 제외: ${duplicateCount}명\n- 양식 오류: ${errorCount}명`);
+                alert(`엑셀 업로드 완료!\n\n- 신규 등록: ${addedCount}명\n- 중복 제외: ${duplicateCount}명\n- 양식 오류: ${errorCount}명${otherSchoolCount ? `\n- 다른 학교라 제외: ${otherSchoolCount}명` : ''}`);
                 fileInput.value = "";
                 loadRegisteredStudents();
                 populateSchoolDropdown();
@@ -1488,7 +1759,7 @@
     function loadRegisteredStudents() {
         const tbody = document.getElementById('students-tbody');
         
-        let students = [...allStudents];
+        let students = mySchoolOnly() ? allStudents.filter(s => s.schoolCode === teacherInfo.school) : [...allStudents];
         students.sort((a, b) => {
             if(a.schoolCode !== b.schoolCode) return String(a.schoolCode).localeCompare(String(b.schoolCode));
             if(a.grade !== b.grade) return a.grade - b.grade;
