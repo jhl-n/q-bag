@@ -55,6 +55,22 @@
         .row-hide-btn:hover { background: #e74c3c; }
         tr.row-hidden .row-hide-btn { background: #2980b9; }
 
+        /* ── 단원·차시 관리 ── */
+        .lesson-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0; }
+        .lesson-bar select, .lesson-bar input[type=text] { width: auto; margin: 0; }
+        .lesson-bar button { width: auto; margin: 0; padding: 8px 14px; font-size: 14px; }
+        .lesson-bar label { display: flex; align-items: center; gap: 4px; font-size: 14px; }
+        .lesson-bar input[type=checkbox] { width: auto; margin: 0; }
+        #lesson-table input[type=text] { margin: 0; padding: 6px 8px; }
+        #lesson-table input[type=checkbox] { width: 18px; height: 18px; margin: 0; }
+        #lesson-table td.no { font-weight: bold; white-space: nowrap; }
+        #lesson-table tr.l-hidden td { background: #f4f6f6; color: #95a5a6; }
+        #lesson-table tr.l-new td { background: #fef9e7; }
+        .move-btn { width: auto; margin: 0 2px; padding: 3px 8px; font-size: 12px; background: #95a5a6; }
+        .dirty-note { color: #d35400; font-weight: bold; font-size: 14px; }
+        .btn-save { background: #27ae60 !important; }
+        .btn-warn { background: #e67e22 !important; }
+
         /* ── 공유 화면(교실 화면에 띄우기) ── */
         #share-view { display: none; position: fixed; inset: 0; background: #1f2a36; z-index: 1000; overflow: auto; padding: 24px; box-sizing: border-box; color: #fff; }
         .share-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
@@ -103,8 +119,6 @@
     <h3>2. 단원 및 차시 선택</h3>
     <select id="unitSelect" onchange="populateLessonDropdown()" disabled>
         <option value="" disabled selected>본인 확인 후 단원을 선택하세요</option>
-        <option value="2">2단원. 물질의 연소</option>
-        <option value="3">3단원. 전기의 이용</option>
     </select>
 
     <select id="lessonSelect" onchange="loadLessonData()" disabled>
@@ -139,6 +153,7 @@
     <div style="margin-top: 15px;">
         <button class="btn-teacher" style="background:#8e44ad;" onclick="showSection('qna')">📝 학생 질문 확인</button>
         <button class="btn-teacher" style="background:#d35400;" onclick="showSection('register')">👥 학생 명단 등록 관리</button>
+        <button class="btn-teacher" style="background:#2c3e50;" onclick="showSection('lessons')">📚 단원·차시 관리</button>
     </div>
 
     <!-- 1. 질문 확인 섹션 : 학급을 먼저 고르면 그 범위만 읽고, 이후 새 질문은 실시간 반영 -->
@@ -152,8 +167,6 @@
             </select>
             <select id="tUnit" onchange="onTeacherUnitChange()">
                 <option value="all">전체 단원</option>
-                <option value="2">2단원. 물질의 연소</option>
-                <option value="3">3단원. 전기의 이용</option>
             </select>
             <select id="tLesson" onchange="onTeacherFilterChange()" disabled>
                 <option value="all">전체 차시</option>
@@ -172,6 +185,42 @@
                 <tr><td colspan="9">학교와 학급을 먼저 선택하세요.</td></tr>
             </tbody>
         </table>
+    </div>
+
+    <!-- 3. 단원·차시 관리 섹션 : meta/lessons 문서 하나를 고쳐 저장 -->
+    <div id="section-lessons" style="display:none;">
+        <div class="reg-box">
+            <h3>단원·차시 관리</h3>
+            <span class="info-text">
+                ※ 여기서 고친 내용은 <strong>저장하기</strong>를 눌러야 반영되며, 학생 화면은 새로고침하면 바뀐 목록이 보입니다.<br>
+                ※ 학생 기록은 <strong>차시 번호</strong>로 연결됩니다. 그래서 차시 번호는 바꿀 수 없고, 내용을 바꾸려면 제목을 고칩니다.<br>
+                ※ 이미 기록이 있는 차시의 제목을 바꾸면 저장 전에 알려 드립니다. 기록마다 저장 당시 제목은 따로 남아 있어 엑셀 '주제' 열로 확인할 수 있습니다.<br>
+                ※ 쓰지 않는 차시는 지우지 말고 <strong>학생에게 보이기</strong>를 끄세요. 교사 화면에서는 계속 보입니다.
+            </span>
+
+            <div class="lesson-bar">
+                <select id="mUnit" onchange="onEditUnitChange()"></select>
+                <button class="btn-refresh" onclick="addEditUnit()">+ 새 단원</button>
+                <span id="lessonDirty" class="dirty-note"></span>
+            </div>
+            <div class="lesson-bar" id="mUnitInfo"></div>
+
+            <table id="lesson-table">
+                <thead>
+                    <tr><th style="width:70px;">차시</th><th>제목</th><th style="width:28%;">관찰 칸 이름 (비우면 기본값)</th><th style="width:90px;">학생에게<br>보이기</th><th style="width:110px;">내용 순서</th></tr>
+                </thead>
+                <tbody id="lesson-tbody"></tbody>
+            </table>
+
+            <div class="lesson-bar" style="margin-top:14px;">
+                <button class="btn-teacher" onclick="addEditLesson()">+ 차시 추가</button>
+                <button class="btn-refresh" onclick="removeLastEditLesson()">마지막 차시 삭제</button>
+                <span style="flex:1;"></span>
+                <button class="btn-refresh" onclick="resetLessonEditor()">변경 취소</button>
+                <button class="btn-refresh btn-warn" onclick="loadDefaultLessons()">기본값 불러오기</button>
+                <button class="btn-teacher btn-save" onclick="saveLessons()">💾 저장하기</button>
+            </div>
+        </div>
     </div>
 
     <!-- 2. 학생 등록 섹션 -->
@@ -302,29 +351,116 @@
         }[c]));
     }
 
-    const LESSON_DATA = {
-        "2": {
-            "1": "거품에 향불 피우기",
-            "2": "서로 다른 물질을 섞으면 어떻게 될까요",
-            "3": "양초와 알코올이 탈 때 나타나는 공통점",
-            "4": "물질이 타려면 무엇이 필요할까요 (1)",
-            "5": "물질이 타려면 무엇이 필요할까요 (2)",
-            "6": "물질이 연소할 때 무엇이 생길까요",
-            "7": "기사 한 편 제대로 읽기"
-        },
-        "3": {
-            "1": "전기로 움직이는 병뚜껑 장난감 만들기",
-            "2": "전구에 불을 켜려면 어떻게 해야 할까요",
-            "3": "전기가 잘 흐르는 물질에는 어떤 것이 있을까요",
-            "4": "전자석을 만들어 볼까요",
-            "5": "전자석은 어떤 성질이 있을까요",
-            "6": "전지의 수에 따른 전기 회로의 특징 비교",
-            "7": "전자석이 사용되는 예를 조사해 볼까요"
-        }
+    // ───────────────────────────────────────────────
+    // 단원·차시 목록
+    //  - 실제로 쓰는 목록은 Firestore 의 meta/lessons 문서 (교사 화면 '단원·차시 관리'에서 수정)
+    //  - 아래 DEFAULT_LESSONS 는 그 문서가 아직 없을 때만 쓰는 기본값
+    //  - 저장된 기록은 '차시 번호'로 연결되므로, 차시 번호는 한 번 정하면 바꾸지 않음
+    //    (내용을 바꾸고 싶으면 제목만 고침. 기록에는 저장 당시 제목(topic)이 따로 남음)
+    // ───────────────────────────────────────────────
+    const DEFAULT_OBS_LABEL = '수업에서 관찰하거나 실험한 내용';
+    const DEFAULT_LESSONS = {
+        units: [
+            { unit: 2, name: "물질의 연소", hidden: false, lessons: [
+                { no: 1, topic: "거품에 향불 피우기" },
+                { no: 2, topic: "서로 다른 물질을 섞으면 어떻게 될까요" },
+                { no: 3, topic: "양초와 알코올이 탈 때 나타나는 공통점" },
+                { no: 4, topic: "물질이 타려면 무엇이 필요할까요 (1)" },
+                { no: 5, topic: "물질이 타려면 무엇이 필요할까요 (2)" },
+                { no: 6, topic: "물질이 연소할 때 무엇이 생길까요" },
+                { no: 7, topic: "기사 한 편 제대로 읽기", obsLabel: "기사를 읽고 알게 된 내용" }
+            ]},
+            { unit: 3, name: "전기의 이용", hidden: false, lessons: [
+                { no: 1, topic: "전기로 움직이는 병뚜껑 장난감 만들기" },
+                { no: 2, topic: "전구에 불을 켜려면 어떻게 해야 할까요" },
+                { no: 3, topic: "전기가 잘 흐르는 물질에는 어떤 것이 있을까요" },
+                { no: 4, topic: "전자석을 만들어 볼까요" },
+                { no: 5, topic: "전자석은 어떤 성질이 있을까요" },
+                { no: 6, topic: "전지의 수에 따른 전기 회로의 특징 비교" },
+                { no: 7, topic: "전자석이 사용되는 예를 조사해 볼까요" },
+                { no: 8, topic: "전자석의 활용 사례와 전기 안전" },
+                { no: 9, topic: "기사를 읽고 내용 파악하기", obsLabel: "기사를 읽고 알게 된 내용" }
+            ]}
+        ]
     };
+    const LESSONS_REF = db.collection("meta").doc("lessons");
+    let LESSONS = normalizeLessons(DEFAULT_LESSONS);
 
-    // 처음 열 때 명단 요약 문서 1개만 읽음
+    // 문서에서 읽은 값을 안전한 모양으로 정리 (빠진 값 채우기, 번호순 정렬)
+    function normalizeLessons(data) {
+        const units = (data && Array.isArray(data.units) ? data.units : [])
+            .filter(u => u && Number.isInteger(Number(u.unit)))
+            .map(u => ({
+                unit: Number(u.unit),
+                name: String(u.name || ''),
+                hidden: !!u.hidden,
+                lessons: (Array.isArray(u.lessons) ? u.lessons : [])
+                    .filter(l => l && Number.isInteger(Number(l.no)))
+                    .map(l => ({
+                        no: Number(l.no),
+                        topic: String(l.topic || ''),
+                        obsLabel: String(l.obsLabel || ''),
+                        hidden: !!l.hidden
+                    }))
+                    .sort((a, b) => a.no - b.no)
+            }))
+            .sort((a, b) => a.unit - b.unit);
+        return { units };
+    }
+
+    function getUnit(unit) {
+        return LESSONS.units.find(u => u.unit === Number(unit)) || null;
+    }
+    // includeHidden: 교사 화면은 숨긴 차시도 보여 줌(이전 기록 확인용), 학생 화면은 숨김
+    function lessonsOf(unit, includeHidden) {
+        const u = getUnit(unit);
+        if (!u) return [];
+        return includeHidden ? u.lessons : u.lessons.filter(l => !l.hidden);
+    }
+    function lessonTopic(unit, no) {
+        const l = lessonsOf(unit, true).find(x => x.no === Number(no));
+        return l ? l.topic : '';
+    }
+    function lessonObsLabel(unit, no) {
+        const l = lessonsOf(unit, true).find(x => x.no === Number(no));
+        return (l && l.obsLabel) ? l.obsLabel : DEFAULT_OBS_LABEL;
+    }
+    function unitLabel(u) {
+        return `${u.unit}단원${u.name ? '. ' + u.name : ''}`;
+    }
+
+    // 학생·교사 화면의 단원 선택 목록을 현재 목록으로 다시 채움
+    function populateUnitSelects() {
+        const stu = document.getElementById('unitSelect');
+        const prevStu = stu.value;
+        stu.innerHTML = '<option value="" disabled selected>본인 확인 후 단원을 선택하세요</option>';
+        LESSONS.units.filter(u => !u.hidden).forEach(u => {
+            stu.innerHTML += `<option value="${u.unit}">${esc(unitLabel(u))}</option>`;
+        });
+        if (prevStu && getUnit(prevStu) && !getUnit(prevStu).hidden) stu.value = prevStu;
+
+        const t = document.getElementById('tUnit');
+        const prevT = t.value;
+        t.innerHTML = '<option value="all">전체 단원</option>';
+        LESSONS.units.forEach(u => {
+            t.innerHTML += `<option value="${u.unit}">${esc(unitLabel(u))}${u.hidden ? ' (학생에게 숨김)' : ''}</option>`;
+        });
+        if (prevT && (prevT === 'all' || getUnit(prevT))) t.value = prevT;
+    }
+
+    async function loadLessons() {
+        try {
+            const doc = await LESSONS_REF.get();
+            if (doc.exists) LESSONS = normalizeLessons(doc.data());
+        } catch (e) {
+            console.warn('단원·차시 목록을 불러오지 못해 기본값을 씁니다:', e.message);
+        }
+        populateUnitSelects();
+    }
+
+    // 처음 열 때 명단 요약 문서 1개 + 단원·차시 문서 1개만 읽음
     async function initApp() {
+        loadLessons();
         try {
             const doc = await ROSTER_REF.get();
             if (doc.exists && Array.isArray(doc.data().list)) {
@@ -513,10 +649,9 @@
         if (!unit) return;
 
         lessonSelect.innerHTML = '<option value="" disabled selected>차시를 선택하세요</option>';
-        const lessons = LESSON_DATA[unit];
-        for (const [lessonNum, topic] of Object.entries(lessons)) {
-            lessonSelect.innerHTML += `<option value="${lessonNum}">[${unit}단원 ${lessonNum}차시] ${esc(topic)}</option>`;
-        }
+        lessonsOf(unit, false).forEach(l => {
+            lessonSelect.innerHTML += `<option value="${l.no}">[${unit}단원 ${l.no}차시] ${esc(l.topic)}</option>`;
+        });
         lessonSelect.disabled = false;
         
         const student = currentStudent;
@@ -531,8 +666,7 @@
         if(isNaN(unit) || isNaN(lesson)) return;
         
         document.getElementById('input-area').style.display = 'block';
-        document.getElementById('obsLabel').textContent =
-            (unit === 2 && lesson === 7) ? '기사를 읽고 알게 된 내용' : '수업에서 관찰하거나 실험한 내용';
+        document.getElementById('obsLabel').textContent = lessonObsLabel(unit, lesson);
         
         const snapshot = await db.collection("questions")
             .where("schoolCode", "==", student.schoolCode)
@@ -654,8 +788,12 @@
     function showSection(sectionId) {
         document.getElementById('section-qna').style.display = sectionId === 'qna' ? 'block' : 'none';
         document.getElementById('section-register').style.display = sectionId === 'register' ? 'block' : 'none';
+        document.getElementById('section-lessons').style.display = sectionId === 'lessons' ? 'block' : 'none';
         if (sectionId === 'register' && !studentsLoaded) {
             reloadStudents();
+        }
+        if (sectionId === 'lessons' && !editLessons) {
+            resetLessonEditor();
         }
     }
 
@@ -687,9 +825,9 @@
         const sel = document.getElementById('tLesson');
         sel.innerHTML = '<option value="all">전체 차시</option>';
         if (unit !== 'all') {
-            for (const [num, topic] of Object.entries(LESSON_DATA[unit])) {
-                sel.innerHTML += `<option value="${num}">${num}차시. ${esc(topic)}</option>`;
-            }
+            lessonsOf(unit, true).forEach(l => {
+                sel.innerHTML += `<option value="${l.no}">${l.no}차시. ${esc(l.topic)}${l.hidden ? ' (숨김)' : ''}</option>`;
+            });
             sel.disabled = false;
         } else {
             sel.disabled = true;
@@ -791,7 +929,8 @@
         }
 
         if (f.unit !== null) {
-            const lessons = Object.keys(LESSON_DATA[f.unit]).map(Number);
+            const lessons = Array.from(new Set(lessonsOf(f.unit, true).map(l => l.no)
+                .concat(classQuestions.map(q => q.lesson)))).sort((a, b) => a - b);
             const doneSet = new Set(classQuestions.map(q => `${q.studentNum}-${q.lesson}`));
             let html = `<div class="status-box"><h4>${f.unit}단원 차시별 제출 현황 (✓ 제출, 빈칸 미제출)</h4><div style="overflow-x:auto;"><table class="matrix"><thead><tr><th>번호</th>`;
             lessons.forEach(l => html += `<th>${l}차시</th>`);
@@ -862,7 +1001,7 @@
         if (!f) { grid.innerHTML = ''; return; }
 
         let title = `${f.grade}학년 ${f.classNum}반`;
-        if (f.unit !== null && f.lesson !== null) title += ` · ${f.unit}단원 ${f.lesson}차시 ${LESSON_DATA[f.unit][f.lesson]}`;
+        if (f.unit !== null && f.lesson !== null) title += ` · ${f.unit}단원 ${f.lesson}차시 ${lessonTopic(f.unit, f.lesson)}`;
         else if (f.unit !== null) title += ` · ${f.unit}단원`;
         document.getElementById('shareTitle').textContent = title + ' 우리의 질문';
 
@@ -925,6 +1064,227 @@
         shareHidden.clear();
         renderQuestionTable();
         renderShare();
+    }
+
+    // --- 단원·차시 관리 ---
+    // editLessons : 화면에서 고치는 중인 사본. '저장하기' 전까지 실제 목록(LESSONS)은 그대로.
+    let editLessons = null;
+    let editUnitNo = null;
+    let lessonDirty = false;
+
+    function cloneLessons(d) { return JSON.parse(JSON.stringify(d)); }
+    function editUnit() { return editLessons.units.find(u => u.unit === editUnitNo) || null; }
+    function markLessonDirty() {
+        lessonDirty = true;
+        document.getElementById('lessonDirty').textContent = '● 저장하지 않은 변경이 있습니다';
+    }
+
+    function resetLessonEditor() {
+        if (lessonDirty && !confirm("저장하지 않은 변경을 버리고 저장된 목록으로 되돌릴까요?")) return;
+        editLessons = cloneLessons(LESSONS);
+        if (!editLessons.units.some(u => u.unit === editUnitNo)) {
+            editUnitNo = editLessons.units.length ? editLessons.units[editLessons.units.length - 1].unit : null;
+        }
+        lessonDirty = false;
+        document.getElementById('lessonDirty').textContent = '';
+        renderLessonEditor();
+    }
+
+    function loadDefaultLessons() {
+        if (!confirm("코드에 들어 있는 기본 목록을 불러옵니다.\n지금 화면에서 고친 내용은 사라지며, '저장하기'를 눌러야 실제로 바뀝니다.\n진행할까요?")) return;
+        editLessons = normalizeLessons(DEFAULT_LESSONS);
+        if (!editLessons.units.some(u => u.unit === editUnitNo)) editUnitNo = editLessons.units[0].unit;
+        markLessonDirty();
+        renderLessonEditor();
+    }
+
+    function renderLessonEditor() {
+        const sel = document.getElementById('mUnit');
+        sel.innerHTML = editLessons.units.length ? '' : '<option value="">단원 없음</option>';
+        editLessons.units.forEach(u => {
+            sel.innerHTML += `<option value="${u.unit}">${esc(unitLabel(u))}</option>`;
+        });
+        if (editUnitNo !== null) sel.value = String(editUnitNo);
+
+        const u = editUnit();
+        const info = document.getElementById('mUnitInfo');
+        const tbody = document.getElementById('lesson-tbody');
+        if (!u) {
+            info.innerHTML = '';
+            tbody.innerHTML = '<tr><td colspan="5">단원을 추가하세요.</td></tr>';
+            return;
+        }
+        info.innerHTML = `
+            <label>${u.unit}단원 이름 <input type="text" id="mUnitName" maxlength="40" style="width:240px;"></label>
+            <label><input type="checkbox" id="mUnitHidden" ${u.hidden ? '' : 'checked'} onchange="setEditUnitHidden(!this.checked)"> 학생에게 이 단원 보이기</label>`;
+        const nameInput = document.getElementById('mUnitName');
+        nameInput.value = u.name;
+        nameInput.oninput = () => { u.name = nameInput.value; markLessonDirty(); };
+
+        if (u.lessons.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5">아직 차시가 없습니다. 아래 \'+ 차시 추가\'를 누르세요.</td></tr>';
+            return;
+        }
+        const saved = getUnit(u.unit);
+        let rows = '';
+        u.lessons.forEach((l, i) => {
+            const isNew = !saved || !saved.lessons.some(x => x.no === l.no);
+            rows += `<tr class="${l.hidden ? 'l-hidden' : ''} ${isNew ? 'l-new' : ''}">
+                <td class="no">${l.no}차시${isNew ? '<br><span class="dup-note">새 차시</span>' : ''}</td>
+                <td><input type="text" maxlength="100" data-i="${i}" data-f="topic" placeholder="차시 제목"></td>
+                <td><input type="text" maxlength="50" data-i="${i}" data-f="obsLabel" placeholder="${esc(DEFAULT_OBS_LABEL)}"></td>
+                <td><input type="checkbox" ${l.hidden ? '' : 'checked'} onchange="setEditLessonHidden(${i}, !this.checked)"></td>
+                <td>
+                    <button class="move-btn" onclick="moveEditLesson(${i}, -1)" ${i === 0 ? 'disabled' : ''} title="위 차시와 내용 바꾸기">▲</button>
+                    <button class="move-btn" onclick="moveEditLesson(${i}, 1)" ${i === u.lessons.length - 1 ? 'disabled' : ''} title="아래 차시와 내용 바꾸기">▼</button>
+                </td>
+            </tr>`;
+        });
+        tbody.innerHTML = rows;
+        // 글자는 value 로 넣어서 따옴표 등이 그대로 보이게 함
+        tbody.querySelectorAll('input[type=text]').forEach(inp => {
+            const l = u.lessons[Number(inp.dataset.i)];
+            inp.value = l[inp.dataset.f] || '';
+            inp.oninput = () => { l[inp.dataset.f] = inp.value; markLessonDirty(); };
+        });
+    }
+
+    function onEditUnitChange() {
+        editUnitNo = Number(document.getElementById('mUnit').value);
+        renderLessonEditor();
+    }
+    function setEditUnitHidden(hidden) {
+        editUnit().hidden = hidden;
+        markLessonDirty();
+    }
+    function setEditLessonHidden(i, hidden) {
+        editUnit().lessons[i].hidden = hidden;
+        markLessonDirty();
+        renderLessonEditor();
+    }
+    // 차시 번호는 그대로 두고 제목·관찰 칸 이름·보이기만 위아래로 맞바꿈
+    function moveEditLesson(i, dir) {
+        const ls = editUnit().lessons;
+        const a = ls[i], b = ls[i + dir];
+        if (!a || !b) return;
+        ['topic', 'obsLabel', 'hidden'].forEach(k => { const t = a[k]; a[k] = b[k]; b[k] = t; });
+        markLessonDirty();
+        renderLessonEditor();
+    }
+
+    function addEditUnit() {
+        const used = editLessons.units.map(u => u.unit);
+        const next = used.length ? Math.max(...used) + 1 : 1;
+        const noText = prompt("새 단원 번호를 입력하세요.", String(next));
+        if (noText === null) return;
+        const no = parseInt(noText);
+        if (!Number.isInteger(no) || no < 1 || no > 99) { alert("단원 번호는 1~99 사이 숫자로 입력하세요."); return; }
+        if (used.includes(no)) { alert(`${no}단원은 이미 있습니다.`); return; }
+        const name = prompt(`${no}단원 이름을 입력하세요. (예: 전기의 이용)`, "");
+        if (name === null) return;
+        editLessons.units.push({ unit: no, name: name.trim(), hidden: false, lessons: [] });
+        editLessons.units.sort((a, b) => a.unit - b.unit);
+        editUnitNo = no;
+        markLessonDirty();
+        renderLessonEditor();
+    }
+
+    function addEditLesson() {
+        const u = editUnit();
+        if (!u) { alert("먼저 단원을 추가하세요."); return; }
+        const next = u.lessons.length ? Math.max(...u.lessons.map(l => l.no)) + 1 : 1;
+        u.lessons.push({ no: next, topic: '', obsLabel: '', hidden: false });
+        markLessonDirty();
+        renderLessonEditor();
+        const inputs = document.querySelectorAll('#lesson-tbody input[data-f=topic]');
+        if (inputs.length) inputs[inputs.length - 1].focus();
+    }
+
+    // 이 단원·차시로 저장된 기록이 하나라도 있는지 (읽기 최대 1건)
+    async function lessonHasRecords(unit, no) {
+        const snap = await db.collection("questions")
+            .where("unit", "==", unit).where("lesson", "==", no).limit(1).get();
+        return !snap.empty;
+    }
+
+    async function removeLastEditLesson() {
+        const u = editUnit();
+        if (!u || u.lessons.length === 0) return;
+        const last = u.lessons[u.lessons.length - 1];
+        const savedBefore = getUnit(u.unit) && getUnit(u.unit).lessons.some(x => x.no === last.no);
+        if (savedBefore) {
+            try {
+                if (await lessonHasRecords(u.unit, last.no)) {
+                    alert(`${u.unit}단원 ${last.no}차시에는 이미 학생 기록이 있어 삭제할 수 없습니다.\n'학생에게 보이기'를 끄면 학생 화면에서만 사라집니다.`);
+                    return;
+                }
+            } catch (e) {
+                alert("기록 확인에 실패해 삭제하지 않았습니다: " + e.message);
+                return;
+            }
+        }
+        if (!confirm(`${u.unit}단원 ${last.no}차시 '${last.topic || '(제목 없음)'}' 을(를) 목록에서 삭제할까요?`)) return;
+        u.lessons.pop();
+        markLessonDirty();
+        renderLessonEditor();
+    }
+
+    async function saveLessons() {
+        const data = normalizeLessons(editLessons);
+        data.units.forEach(u => {
+            u.name = u.name.trim();
+            u.lessons.forEach(l => { l.topic = l.topic.trim(); l.obsLabel = l.obsLabel.trim(); });
+        });
+
+        // 1) 빈 제목 확인
+        for (const u of data.units) {
+            const empty = u.lessons.find(l => !l.topic);
+            if (empty) {
+                editUnitNo = u.unit; renderLessonEditor();
+                alert(`${u.unit}단원 ${empty.no}차시의 제목이 비어 있습니다.`);
+                return;
+            }
+        }
+
+        // 2) 제목이 바뀐 차시 중 이미 기록이 있는 차시 확인 (바뀐 차시 수만큼만 읽음)
+        const changed = [];
+        data.units.forEach(u => {
+            const saved = getUnit(u.unit);
+            if (!saved) return;
+            u.lessons.forEach(l => {
+                const old = saved.lessons.find(x => x.no === l.no);
+                if (old && old.topic !== l.topic) changed.push({ unit: u.unit, no: l.no, from: old.topic, to: l.topic });
+            });
+        });
+        const withRecords = [];
+        try {
+            for (const c of changed) {
+                if (await lessonHasRecords(c.unit, c.no)) withRecords.push(c);
+            }
+        } catch (e) {
+            alert("기록 확인에 실패해 저장하지 않았습니다: " + e.message);
+            return;
+        }
+        if (withRecords.length) {
+            const list = withRecords.map(c => `· ${c.unit}단원 ${c.no}차시: '${c.from}' → '${c.to}'`).join('\n');
+            if (!confirm(`아래 차시에는 이미 학생 기록이 있습니다.\n\n${list}\n\n제목을 바꾸면 기존 기록도 교사 화면에서 같은 차시 번호(새 제목) 아래에 보입니다.\n(각 기록의 저장 당시 제목은 엑셀 '주제' 열에 그대로 남습니다.)\n\n그래도 저장할까요?`)) return;
+        }
+
+        // 3) 저장
+        try {
+            await LESSONS_REF.set({ units: data.units, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+        } catch (e) {
+            alert("저장 실패: " + e.message + "\n(보안 규칙에 meta/lessons 허용이 들어 있는지 확인하세요.)");
+            return;
+        }
+        LESSONS = data;
+        editLessons = cloneLessons(LESSONS);
+        lessonDirty = false;
+        document.getElementById('lessonDirty').textContent = '';
+        populateUnitSelects();
+        onTeacherUnitChange();
+        renderLessonEditor();
+        alert("단원·차시 목록을 저장했습니다.\n학생 화면은 새로고침하면 바뀐 목록이 보입니다.");
     }
 
     // --- 명단 관리 ---
