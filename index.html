@@ -193,6 +193,7 @@
         </div>
     </div>
     
+    <div id="schoolWarn" class="status-box" style="display:none; border-color:#e67e22; background:#fef5e7; color:#a04000;"></div>
     <div style="margin-top: 15px;">
         <button class="btn-teacher" style="background:#8e44ad;" onclick="showSection('qna')">📝 학생 질문 확인</button>
         <button class="btn-teacher" style="background:#d35400;" onclick="showSection('register')" data-roles="admin teacher">👥 학생 명단 등록 관리</button>
@@ -261,6 +262,7 @@
             </div>
         </div>
         <h3 style="margin-top: 20px;">권한이 있는 계정 <button class="btn-refresh" onclick="loadStaff()">🔄 새로고침</button></h3>
+        <div id="schoolFixBox" class="status-box" style="display:none; border-color:#e67e22; background:#fef5e7;"></div>
         <table id="staff-table">
             <thead><tr><th>이메일</th><th>이름</th><th>역할</th><th>학교</th><th>사용</th><th>저장</th></tr></thead>
             <tbody id="staff-tbody"></tbody>
@@ -539,6 +541,11 @@
     }
 
     // 처음 열 때 명단 요약 문서 1개 + 단원·차시 문서 1개만 읽음
+    // 명단 요약을 다 읽었는지 알려 주는 약속. 교사 화면은 이걸 기다린 뒤 열어야
+    // 학교 목록과 학교 이름 맞추기가 제대로 동작함
+    let rosterReadyDone;
+    const rosterReady = new Promise(res => { rosterReadyDone = res; });
+
     async function initApp() {
         loadLessons();
         if (wantsTeacher) teacherLogin();
@@ -556,6 +563,8 @@
             populateSchoolDropdown();
         } catch (error) {
             alert("❗ 데이터베이스 읽기 오류!\nFirebase 보안 규칙을 확인해주세요.\n(에러: " + error.message + ")");
+        } finally {
+            rosterReadyDone();
         }
     }
     window.onload = initApp;
@@ -919,6 +928,7 @@
                 showRequestBox(email, d);
                 return;
             }
+            await rosterReady;
             teacherInfo = { email, name: d.name || '', role: d.role, school: d.school || '' };
             document.getElementById('login-view').style.display = 'none';
             openTeacherView();
@@ -1022,6 +1032,16 @@
             `${esc(who)}<span class="role-badge role-${teacherInfo.role}">${ROLE_NAMES[teacherInfo.role]}${mySchoolOnly() ? ' · ' + esc(teacherInfo.school) : ''}</span>`;
         const reg = document.getElementById('regSchool');
         if (mySchoolOnly()) { reg.value = teacherInfo.school; reg.readOnly = true; }
+        const warn = document.getElementById('schoolWarn');
+        if (mySchoolMismatch()) {
+            warn.style.display = 'block';
+            warn.textContent = '⚠️ ' + mismatchMsg().replace('\n', ' ');
+        } else if (mySchoolOnly() && !roster.some(s => s.schoolCode === teacherInfo.school)) {
+            warn.style.display = 'block';
+            warn.textContent = `아직 '${teacherInfo.school}' 학생 명단이 없습니다. '학생 명단 등록 관리'에서 학생을 먼저 등록하세요.`;
+        } else {
+            warn.style.display = 'none';
+        }
     }
 
     // [변경] 교사 화면을 열 때 아무것도 미리 읽지 않음.
@@ -1056,7 +1076,7 @@
         const sel = document.getElementById('tSchool');
         const prev = sel.value;
         const schools = Array.from(new Set(roster.map(s => s.schoolCode)))
-            .filter(s => !mySchoolOnly() || s === teacherInfo.school);
+            .filter(s => !mySchoolOnly() || sameSchool(s, teacherInfo.school));
         sel.innerHTML = '<option value="">학교 선택</option>';
         schools.forEach(s => sel.innerHTML += `<option value="${esc(s)}">${esc(s)}</option>`);
         if (prev && schools.includes(prev)) sel.value = prev;
@@ -1407,6 +1427,7 @@
             staffList = snap.docs.map(d => Object.assign({ email: d.id }, d.data()))
                 .sort((a, b) => (a.role || '').localeCompare(b.role || '') || a.email.localeCompare(b.email));
             renderStaff();
+            renderSchoolFix();
         } catch (e) {
             tbody.innerHTML = '<tr><td colspan="6">에러: ' + esc(e.message) + '</td></tr>';
         }
@@ -1437,6 +1458,36 @@
             if (el.dataset.f === 'active') el.checked = t.active !== false;
             else el.value = t[el.dataset.f] || '';
         });
+    }
+
+    function sameSchool(a, b) { return normSchool(a) === normSchool(b); }
+
+    // 학교 교사 계정 중 학교 이름이 명단과 줄임말만 다른 계정 찾기
+    function staffSchoolMismatches() {
+        return staffList.filter(t => t.role === 'teacher' && t.school && resolveSchoolName(t.school) !== t.school);
+    }
+    function renderSchoolFix() {
+        const box = document.getElementById('schoolFixBox');
+        const list = staffSchoolMismatches();
+        if (!list.length) { box.style.display = 'none'; return; }
+        box.style.display = 'block';
+        box.innerHTML = `⚠️ 학교 이름이 학생 명단과 달라 학생 등록·삭제가 막히는 계정 ${list.length}명: ` +
+            list.map(t => `${esc(t.email)} ('${esc(t.school)}' → '${esc(resolveSchoolName(t.school))}')`).join(', ') +
+            ` <button class="btn-reset" style="background:#e67e22; width:auto;" onclick="fixStaffSchools()">학교 이름 맞추기</button>`;
+    }
+    async function fixStaffSchools() {
+        const list = staffSchoolMismatches();
+        if (!list.length) return;
+        try {
+            const batch = db.batch();
+            list.forEach(t => batch.set(db.collection('teachers').doc(t.email),
+                staffPayload(t.name || '', t.role, resolveSchoolName(t.school), t.active !== false)));
+            await batch.commit();
+            alert(`${list.length}명의 학교 이름을 학생 명단과 같게 맞췄습니다.\n해당 선생님은 페이지를 새로고침하면 바로 적용됩니다.`);
+            loadStaff();
+        } catch (e) {
+            alert("학교 이름 맞추기 실패: " + e.message);
+        }
     }
 
     // 학교 이름 비교용: 띄어쓰기 무시, '○○초등학교'와 '○○초'를 같은 이름으로 봄
@@ -1812,7 +1863,19 @@
         }
     }
     
+    // 내 계정의 학교 이름이 명단과 줄임말만 다른 경우(예: 한산초 ↔ 한산초등학교)
+    // 보기는 되지만 학생 등록·삭제는 보안 규칙에서 막히므로, 운영자가 이름을 맞춰야 함
+    function mySchoolMismatch() {
+        if (!mySchoolOnly()) return false;
+        const fixed = resolveSchoolName(teacherInfo.school);
+        return fixed !== teacherInfo.school;
+    }
+    function mismatchMsg() {
+        return `내 계정의 학교 이름('${teacherInfo.school}')이 학생 명단의 이름('${resolveSchoolName(teacherInfo.school)}')과 달라 학생 등록·삭제가 막혀 있습니다.\n운영자에게 '학교 이름 맞추기'를 요청하세요.`;
+    }
+
     async function registerStudent() {
+        if (mySchoolMismatch()) { alert(mismatchMsg()); return; }
         const school = mySchoolOnly() ? teacherInfo.school : resolveSchoolName(document.getElementById('regSchool').value);
         const grade = parseInt(document.getElementById('regGrade').value);
         const classNum = parseInt(document.getElementById('regClass').value);
@@ -1854,6 +1917,7 @@
     }
 
     function uploadExcel() {
+        if (mySchoolMismatch()) { alert(mismatchMsg()); return; }
         const fileInput = document.getElementById('excelFileInput');
         const file = fileInput.files[0];
         if (!file) {
@@ -1941,7 +2005,7 @@
     function loadRegisteredStudents() {
         const tbody = document.getElementById('students-tbody');
         
-        let students = mySchoolOnly() ? allStudents.filter(s => s.schoolCode === teacherInfo.school) : [...allStudents];
+        let students = mySchoolOnly() ? allStudents.filter(s => sameSchool(s.schoolCode, teacherInfo.school)) : [...allStudents];
         students.sort((a, b) => {
             if(a.schoolCode !== b.schoolCode) return String(a.schoolCode).localeCompare(String(b.schoolCode));
             if(a.grade !== b.grade) return a.grade - b.grade;
